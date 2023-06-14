@@ -1,1 +1,5 @@
 vivado/
+xsim/*
+
+!xsim/sim.bat
+!xsim/xsim_cfg.tcl
