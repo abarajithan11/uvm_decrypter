@@ -15,7 +15,7 @@ function encrypt_t encrypt (
     input logic [5:0] LFSR_init  // for program 2 run
   );
 
-    int lk;		   // counts leading spaces for program 3
+    int lk, ct;
     int str_len;
     string      str_enc2[64];          // decryption program input
     logic [5:0] LFSR_ptrn[6];		       // 6 possible maximal-length 6-bit LFSR tap ptrns
@@ -112,12 +112,17 @@ function encrypt_t encrypt (
       $write(" %h",msg_padded2[jj]);
 	  $display("\n");
 
+    for(int nn=0; nn<64; nn++)			   // count leading underscores
+      if(str2[nn]==8'h5f) ct++; 
+	  else break;
+	  $display("ct = %d",ct);
+
     return msg_crypto2;
 
 endfunction
 
 module Lab_4_260_tb             ;
-  logic       clk               ;		       // advances simulation step-by-step
+  logic       clk = 0           ;		       // advances simulation step-by-step
   logic       init              ;          // init (reset, start) command to DUT
   logic       wr_en             ;          // DUT memory core write enable
   logic [7:0] raddr             ,
@@ -130,40 +135,29 @@ module Lab_4_260_tb             ;
               msg_decryp2[64]   ,          // recovered decrypted message from DUT
 			        LFSR_init         ;      
 
-  string     str2;
-//    = "Mr_Watson_come here_I_want_to_see_you_my_aide";	// 1st program 1 input
-//  string     str2  = "Knowledge comes, but wisdom lingers.     ";	// program 2 output
-//  string     str2  = "                                         ";	// program 2 output
-//  string     str2  = "  01234546789abcdefghijklmnopqrstuvwxyz. ";	// 2nd program 1 input
-//  string     str2  = "            A joke is a very serious thing.";	// program 3 output
-  int str_len                   ;		   // length of string (character count)
-
-// displayed encrypted string will go here:
-  string     str_dec2[64]       ;          // decrypted string will go here
-  int ct                        ;
-  
+  string      str2;
+  int         str_len           ;		       // length of string (character count)
+  string      str_dec2[64]      ;          // decrypted string will go here
   int pat_sel                   ;          // LFSR pattern select
 
   top_level_4_260 dut(.*)       ;          // your top level design goes here 
-
+  initial forever #5ns clk <= !clk;
 
   initial begin	 :initial_loop
-    clk   = 'b0;
     init  = 'b1;
     wr_en = 'b0;
 //    static integer fi = $fopen("original_msg.txt","r");
 //    $fgets(str2, fi);
 
-  str2 = "Mr_Watson_come_here_I_want_to_see_you";//_my_aide";
-  str_len = str2.len;
-  pre_length = 10;    // values 7 to 63 recommended
-  pat_sel =  2;
-  LFSR_init = 6'h01;  // for program 2 run
+    str2 = "Mr_Watson_come_here_I_want_to_see_you";//_my_aide";
+    str_len = str2.len;
+    pre_length = 10;    // values 7 to 63 recommended
+    pat_sel =  2;
+    LFSR_init = 6'h01;  // for program 2 run
 
-  msg_crypto2 = encrypt(.str2(str2), .pre_length(pre_length), .pat_sel(pat_sel), .LFSR_init(LFSR_init));
+    msg_crypto2 = encrypt(.str2(str2), .pre_length(pre_length), .pat_sel(pat_sel), .LFSR_init(LFSR_init));
 
-
-// run decryption program 
+    // run decryption program 
     repeat(5) @(posedge clk);
 
     for(int qp=0; qp<64; qp++) begin
@@ -173,24 +167,14 @@ module Lab_4_260_tb             ;
       data_in <= msg_crypto2[qp];
     end
 
-    @(posedge clk)
-      wr_en   <= 'b0;                   // turn off mem write for rest of simulation
-//    for(int n=64; n<128; n++)
-//	  dut.dm1.core[n] = msg_crypto2[n-64]; //{^msg_crypto2[n-64][6:0],msg_crypto2[n-64][6:0]};
-
-    @(posedge clk) 
-      init    <= 0 ;
+    @(posedge clk) wr_en <= 'b0;                   // turn off mem write for rest of simulation
+    @(posedge clk) init  <= 0 ;
 
     repeat(6) @(posedge clk);              // wait for 6 clock cycles of nominal 10ns each
     wait(done);                            // wait for DUT's done flag to go high
     
     #10ns $display("done at time %t",$time);
     $display("run decryption:");
-
-    for(int nn=0; nn<64; nn++)			   // count leading underscores
-      if(str2[nn]==8'h5f) ct++; 
-	  else break;
-	  $display("ct = %d",ct);
 
     for(int n=0; n<str_len+1; n++) begin
       @(posedge clk);
@@ -209,18 +193,11 @@ module Lab_4_260_tb             ;
 
     for(int ss=0; ss<str_len+1; ss++)
       $write("%s",str_dec2[ss]);
-    $display();  
-
-//    $display("%d bench msg: %h dut msg: %h    %s",
-//          n, str2[n+ct], dut.dm1.core[n], dut.dm1.core[n]);   
-//    $fclose(fi);      
+    $display();    
 
     #20ns $stop;
   end  :initial_loop
 
-always begin							 // continuous loop
-  #5ns clk = 1;							 // clock tick
-  #5ns clk = 0;							 // clock tock
-end										 // continue
+
 
 endmodule
