@@ -188,8 +188,14 @@ class rand_data;
 
 endclass
 
-module Lab_4_260_tb             ;
-  logic       clk = 0           ;		       // advances simulation step-by-step
+module Lab_4_260_tb;
+
+
+  logic clk = 0;
+  initial forever #5ns clk <= !clk;
+
+
+
   logic       init              ;          // init (reset, start) command to DUT
   logic       wr_en             ;          // DUT memory core write enable
   logic [7:0] raddr             ,
@@ -197,19 +203,16 @@ module Lab_4_260_tb             ;
               data_in           ;
   wire  [7:0] data_out          ;
   wire        done              ;          // done flag returned by DUT
-  logic [7:0] pre_length        ;          // bytes before first character in message
-	logic [5:0] LFSR_init         ;      
+  top_level_4_260 dut(.*)       ;          // your top level design goes here 
+
+
+
+  rand_data obj;
+  string      str2, str_dec2    ;          // decrypted string will go here
   logic [7:0] msg_crypto2[64]   ,          // encrypted message according to the DUT
               msg_decryp2[64]   ,          // recovered decrypted message from DUT
               msg_padded2[64]   ;
 
-  string      str2, str_dec2    ;          // decrypted string will go here
-  int pat_sel                   ;          // LFSR pattern select
-
-  rand_data obj;
-
-  top_level_4_260 dut(.*)       ;          // your top level design goes here 
-  initial forever #5ns clk <= !clk;
 
   initial begin	 :initial_loop
 
@@ -219,17 +222,15 @@ module Lab_4_260_tb             ;
 
     // obj.randomize();
     str2 = obj.get_str();
-    pre_length = obj.pre_length;
-    pat_sel =  obj.pat_sel;
-    LFSR_init = obj.LFSR_init;
     
+    msg_padded2 = pad(.str2(str2), .pre_length(obj.pre_length));
+    msg_crypto2 = encrypt(.msg_padded2(msg_padded2), .pat_sel(obj.pat_sel), .LFSR_init(obj.LFSR_init));
+
+    // run decryption program 
+
     init  = 'b1;
     wr_en = 'b0;
     
-    msg_padded2 = pad(.str2(str2), .pre_length(pre_length));
-    msg_crypto2 = encrypt(.msg_padded2(msg_padded2), .pat_sel(pat_sel), .LFSR_init(LFSR_init));
-
-    // run decryption program 
     repeat(5) @(posedge clk);
 
     for(int qp=0; qp<64; qp++) begin
