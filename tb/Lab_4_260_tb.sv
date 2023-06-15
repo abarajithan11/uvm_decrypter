@@ -160,28 +160,29 @@ endinterface
 
 class rand_data;
 
-  rand bit [7:0] pre_length;
+  rand bit unsigned [7:0] pre_length;
   constraint pre_length_c { pre_length  >=7 && pre_length <= 63; } // values 7 to 63 recommended
 
-  rand int pat_sel;
-  constraint pat_sel_size { pat_sel  >=0 && pat_sel <= 5; }
+  rand int unsigned pat_sel;
+  constraint pat_sel_size { pat_sel < 6; }
 
-  rand bit [5:0] LFSR_init;
+  rand bit unsigned [5:0] LFSR_init;
   constraint LFSR_init_non_zero { LFSR_init !=0; }
  
   rand byte unsigned temp[];
   constraint str_len { temp.size() < 50; } // Length of the string
   constraint str_ascii { foreach(temp[i]) temp[i] inside {[65:90], [97:122]}; } //To restrict between 'A-Z' and 'a-z'
+  constraint padded_len { pre_length + temp.size() <= 50; }
  
   function string get_str();
-      // string str;
-      // foreach(temp[i]) str = {str, string'(temp[i])};
-      // return str;
-      return "Mr_Watson_come_here_I_want_to_see_you";
+      string str;
+      foreach(temp[i]) str = {str, string'(temp[i])};
+      return str;
+      // return "Mr_Watson_come_here_I_want_to_see_you";
   endfunction
 
   function new();
-    pre_length = 10;    // values 7 to 63 recommended
+    pre_length = 10;    // values 7 to 63 recommclearended
     pat_sel =  2;
     LFSR_init = 6'h01;  // for program 2 run
   endfunction
@@ -219,9 +220,9 @@ module Lab_4_260_tb;
 
     obj = new();
 
-    for (int i=0; i<2; i++) begin
+    repeat (1000) begin
 
-      // obj.randomize();
+      obj.randomize();
       str2 = obj.get_str();
       
       msg_padded2 = pad(.str2(str2), .pre_length(obj.pre_length));
@@ -248,7 +249,6 @@ module Lab_4_260_tb;
       #10ns $display("done at time %t",$time);
 
       reading = 1;
-
       for(int n=0; n<str2.len+1; n++)
         @(posedge clk) raddr <= n;
 
