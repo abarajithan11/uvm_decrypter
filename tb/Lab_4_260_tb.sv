@@ -121,6 +121,43 @@ function unpacked_8_64 encrypt (
 
 endfunction
 
+interface dec_if (input logic clk);
+
+  logic       init;
+  logic       wr_en;
+  logic[7:0]  raddr, 
+              waddr,
+              data_in;
+  logic[7:0]  data_out;
+  logic       done;
+  
+  clocking driver_cb @(posedge clk);
+    default input #1 output #1;
+    output init;
+    output wr_en;
+    output raddr; 
+    output waddr;
+    output data_in;
+    input  data_out;
+    input  done;
+  endclocking
+  
+  clocking monitor_cb @(posedge clk);
+    default input #1 output #1;
+    input init;
+    input wr_en;
+    input raddr; 
+    input waddr;
+    input data_in;
+    input data_out;
+    input done;
+  endclocking
+  
+  modport DRIVER  (clocking driver_cb,  input clk);
+  modport MONITOR (clocking monitor_cb, input clk);
+
+endinterface
+
 class rand_data;
 
   rand bit [7:0] pre_length;

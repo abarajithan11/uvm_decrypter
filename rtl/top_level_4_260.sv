@@ -7,7 +7,9 @@ module top_level_4_260(
                     waddr,
                     data_in,
   output logic[7:0] data_out,             
-  output logic      done);
+  output logic      done
+);
+
   logic       initQ    = 0;          // previous value of init, for edge detection
   logic[15:0] cycle_ct = 0;
   logic[5:0] LFSR[64];               // LFSR states
