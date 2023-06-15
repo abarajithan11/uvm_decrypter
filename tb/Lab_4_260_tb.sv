@@ -121,6 +121,28 @@ function unpacked_8_64 encrypt (
 
 endfunction
 
+class rand_data;
+
+  rand bit [7:0] pre_length;
+  constraint pre_length_c { pre_length  >=7 && pre_length <= 63; } // values 7 to 63 recommended
+
+  rand int pat_sel;
+  constraint pat_sel_size { pat_sel  >=0 && pat_sel <= 5; }
+
+  rand bit [5:0] LFSR_init;
+  constraint LFSR_init_non_zero { LFSR_init !=0; }
+ 
+  rand byte unsigned temp[];
+  constraint str_len { temp.size() < 50; } // Length of the string
+  constraint str_ascii { foreach(temp[i]) temp[i] inside {[65:90], [97:122]}; } //To restrict between 'A-Z' and 'a-z'
+ 
+  function string get_str();
+      string str;
+      foreach(temp[i]) str = {str, string'(temp[i])};
+      return str;
+  endfunction
+endclass
+
 module Lab_4_260_tb             ;
   logic       clk = 0           ;		       // advances simulation step-by-step
   logic       init              ;          // init (reset, start) command to DUT
@@ -140,19 +162,29 @@ module Lab_4_260_tb             ;
   string      str_dec2[64]      ;          // decrypted string will go here
   int pat_sel                   ;          // LFSR pattern select
 
+  rand_data obj;
+
   top_level_4_260 dut(.*)       ;          // your top level design goes here 
   initial forever #5ns clk <= !clk;
 
   initial begin	 :initial_loop
+
+    // str2 = "Mr_Watson_come_here_I_want_to_see_you";//_my_aide";
+    // pre_length = 10;    // values 7 to 63 recommended
+    // pat_sel =  2;
+    // LFSR_init = 6'h01;  // for program 2 run
+    obj = new();
+
+  repeat (100) begin
+
+    obj.randomize();
+    str2 = obj.get_str();
+    pre_length = obj.pre_length;
+    pat_sel =  obj.pat_sel;
+    LFSR_init = obj.LFSR_init;
+    
     init  = 'b1;
     wr_en = 'b0;
-//    static integer fi = $fopen("original_msg.txt","r");
-//    $fgets(str2, fi);
-
-    str2 = "Mr_Watson_come_here_I_want_to_see_you";//_my_aide";
-    pre_length = 10;    // values 7 to 63 recommended
-    pat_sel =  2;
-    LFSR_init = 6'h01;  // for program 2 run
     
     msg_padded2 = pad(.str2(str2), .pre_length(pre_length));
     msg_crypto2 = encrypt(.msg_padded2(msg_padded2), .pat_sel(pat_sel), .LFSR_init(LFSR_init));
@@ -196,9 +228,10 @@ module Lab_4_260_tb             ;
     $display();
 
     assert (msg_padded2 == msg_padded2) 
-      $display ("Decryption successful");
+      $display ("\nDECRYPTION SUCCESSFUL\n");
     else
-      $display ("Decryption failed");
+      $fatal ("Decryption FAILED");
+  end
 
 
     #20ns $stop;
