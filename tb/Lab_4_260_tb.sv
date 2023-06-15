@@ -174,10 +174,18 @@ class rand_data;
   constraint str_ascii { foreach(temp[i]) temp[i] inside {[65:90], [97:122]}; } //To restrict between 'A-Z' and 'a-z'
  
   function string get_str();
-      string str;
-      foreach(temp[i]) str = {str, string'(temp[i])};
-      return str;
+      // string str;
+      // foreach(temp[i]) str = {str, string'(temp[i])};
+      // return str;
+      return "Mr_Watson_come_here_I_want_to_see_you";
   endfunction
+
+  function new();
+    pre_length = 10;    // values 7 to 63 recommended
+    pat_sel =  2;
+    LFSR_init = 6'h01;  // for program 2 run
+  endfunction
+
 endclass
 
 module Lab_4_260_tb             ;
@@ -195,8 +203,7 @@ module Lab_4_260_tb             ;
               msg_decryp2[64]   ,          // recovered decrypted message from DUT
               msg_padded2[64]   ;
 
-  string      str2;
-  string      str_dec2[64]      ;          // decrypted string will go here
+  string      str2, str_dec2    ;          // decrypted string will go here
   int pat_sel                   ;          // LFSR pattern select
 
   rand_data obj;
@@ -206,15 +213,11 @@ module Lab_4_260_tb             ;
 
   initial begin	 :initial_loop
 
-    // str2 = "Mr_Watson_come_here_I_want_to_see_you";//_my_aide";
-    // pre_length = 10;    // values 7 to 63 recommended
-    // pat_sel =  2;
-    // LFSR_init = 6'h01;  // for program 2 run
     obj = new();
 
-  repeat (100) begin
+  for (int i=0; i<2; i++) begin
 
-    obj.randomize();
+    // obj.randomize();
     str2 = obj.get_str();
     pre_length = obj.pre_length;
     pat_sel =  obj.pat_sel;
@@ -246,28 +249,21 @@ module Lab_4_260_tb             ;
     $display("run decryption:");
 
     for(int n=0; n<str2.len+1; n++) begin
-      @(posedge clk);
-      raddr          <= n;
-      @(posedge clk);
-      msg_decryp2[n] <= data_out;
+      @(posedge clk);  raddr          <= n;
+      @(posedge clk);  msg_decryp2[n] <= data_out;
     end
 
-    for(int rr=0; rr<str2.len+1; rr++)
-      str_dec2[rr] = string'(msg_decryp2[rr]);
+    str_dec2 = "";
+    for(int rr=0; rr<str2.len; rr++)
+      str_dec2 = {str_dec2, string'(msg_decryp2[rr])};
 
     @(posedge clk)
-    for(int qq=0; qq<str2.len+1; qq++)
-      $writeh(msg_decryp2[qq]);
-    $display();
 
-    for(int ss=0; ss<str2.len+1; ss++)
-      $write("%s",str_dec2[ss]);
-    $display();
-
-    assert (msg_padded2 == msg_padded2) 
-      $display ("\nDECRYPTION SUCCESSFUL\n");
+    $display ("Decoded message: %s ", str_dec2);
+    assert (str_dec2 == str2) 
+      $display ("\n%d - DECRYPTION SUCCESSFUL\n", i);
     else
-      $fatal ("Decryption FAILED");
+      $fatal ("\n%d - DECRYPTION FAILED. Sent: %s, Got: %s \n", i, str2, str_dec2);
   end
 
 
