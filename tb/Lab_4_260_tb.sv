@@ -194,8 +194,6 @@ module Lab_4_260_tb;
   logic clk = 0;
   initial forever #5ns clk <= !clk;
 
-
-
   logic       init              ;          // init (reset, start) command to DUT
   logic       wr_en             ;          // DUT memory core write enable
   logic [7:0] raddr             ,
@@ -213,64 +211,75 @@ module Lab_4_260_tb;
               msg_decryp2[64]   ,          // recovered decrypted message from DUT
               msg_padded2[64]   ;
 
+  bit reading = 0;
+  bit [7:0] raddr_mon = 0;
 
-  initial begin	 :initial_loop
+
+  initial begin	 :driver
 
     obj = new();
 
-  for (int i=0; i<2; i++) begin
+    for (int i=0; i<2; i++) begin
 
-    // obj.randomize();
-    str2 = obj.get_str();
-    
-    msg_padded2 = pad(.str2(str2), .pre_length(obj.pre_length));
-    msg_crypto2 = encrypt(.msg_padded2(msg_padded2), .pat_sel(obj.pat_sel), .LFSR_init(obj.LFSR_init));
+      // obj.randomize();
+      str2 = obj.get_str();
+      
+      msg_padded2 = pad(.str2(str2), .pre_length(obj.pre_length));
+      msg_crypto2 = encrypt(.msg_padded2(msg_padded2), .pat_sel(obj.pat_sel), .LFSR_init(obj.LFSR_init));
 
-    // run decryption program 
+      init  = 'b1;
+      wr_en = 'b0;
 
-    init  = 'b1;
-    wr_en = 'b0;
-    
-    repeat(5) @(posedge clk);
+      repeat(5) @(posedge clk);
 
-    for(int qp=0; qp<64; qp++) begin
+      for(int qp=0; qp<64; qp++) begin
+        @(posedge clk);
+        wr_en   <= 'b1;                   // turn on memory write enable
+        waddr   <= qp+64;                 // write encrypted message to mem [64:127]
+        data_in <= msg_crypto2[qp];
+      end
+
+      @(posedge clk) wr_en <= 'b0;                   // turn off mem write for rest of simulation
+      @(posedge clk) init  <= 0 ;
+
+      repeat(6) @(posedge clk);              // wait for 6 clock cycles of nominal 10ns each
+      wait(done);                            // wait for DUT's done flag to go high
+      
+      #10ns $display("done at time %t",$time);
+
+      reading = 1;
+
+      for(int n=0; n<str2.len+1; n++)
+        @(posedge clk) raddr <= n;
+
+      @(posedge clk) reading = 0;
       @(posedge clk);
-      wr_en   <= 'b1;                   // turn on memory write enable
-      waddr   <= qp+64;                 // write encrypted message to mem [64:127]
-      data_in <= msg_crypto2[qp];
     end
 
-    @(posedge clk) wr_en <= 'b0;                   // turn off mem write for rest of simulation
-    @(posedge clk) init  <= 0 ;
+    #20ns $stop;
+  end  :driver
 
-    repeat(6) @(posedge clk);              // wait for 6 clock cycles of nominal 10ns each
-    wait(done);                            // wait for DUT's done flag to go high
-    
-    #10ns $display("done at time %t",$time);
-    $display("run decryption:");
 
-    for(int n=0; n<str2.len+1; n++) begin
-      @(posedge clk);  raddr          <= n;
-      @(posedge clk);  msg_decryp2[n] <= data_out;
+  initial forever begin: monitor_scoreboard
+
+    wait(reading);
+    while (reading) begin
+      @(posedge clk)
+      msg_decryp2[raddr] = data_out;
+      $display ("monitor reading %d %d", raddr_mon, data_out); //msg_decryp2[raddr-1] <= data_out;
     end
 
     str_dec2 = "";
     for(int rr=0; rr<str2.len; rr++)
       str_dec2 = {str_dec2, string'(msg_decryp2[rr])};
 
-    @(posedge clk)
-
     $display ("Decoded message: %s ", str_dec2);
     assert (str_dec2 == str2) 
-      $display ("\n%d - DECRYPTION SUCCESSFUL\n", i);
+      $display ("\n - DECRYPTION SUCCESSFUL\n");
     else
-      $fatal ("\n%d - DECRYPTION FAILED. Sent: %s, Got: %s \n", i, str2, str_dec2);
-  end
+      $fatal ("\n - DECRYPTION FAILED. Sent: %s, Got: %s \n", str2, str_dec2);
 
-
-    #20ns $stop;
-  end  :initial_loop
-
+  end: monitor_scoreboard
 
 
 endmodule
