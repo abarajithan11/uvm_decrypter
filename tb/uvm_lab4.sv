@@ -1,61 +1,162 @@
 `include "uvm_macros.svh"
 import uvm_pkg::*;
 
-module decory
-  #( parameter ADDR_WIDTH = 2,
-     parameter DATA_WIDTH = 8 ) (
-    input  logic clk,
-    input  logic reset,
-    input  logic [ADDR_WIDTH-1:0]  addr,
-    input  logic                  wr_en,
-    input  logic                  rd_en,
-    input  logic [DATA_WIDTH-1:0] wdata,
-    output logic [DATA_WIDTH-1:0] rdata
-  ); 
-  // reg [DATA_WIDTH-1:0] rdata;
-  logic [DATA_WIDTH-1:0] dec [2**ADDR_WIDTH];
 
-  always @(posedge reset) 
-    for(int i=0;i<2**ADDR_WIDTH;i++) dec[i]=8'hFF;
-  always @(posedge clk) 
-    if (wr_en)    dec[addr] <= wdata;
-  always @(posedge clk)
-    if (rd_en) rdata <= dec[addr];
+function logic [63:0][7:0] pad (
+  input string str2,
+  input logic [7:0] pre_length
+  );
 
-endmodule
+    int lk, ct;
 
-//-------------------------------------------------------------------------
-//            Interface
-//-------------------------------------------------------------------------
+    // set preamble lengths for the program runs (always > 6)
+    // ***** choose any value > 6 *****
+    
+    if(pre_length < 7) begin
+      $display("illegal preamble length chosen, overriding with 8");
+      pre_length =  8;                     // override < 6 with a legal value
+    end else
+      $display("preamble length = %d",pre_length);
 
-interface dec_if(input logic clk,reset);
-  
-  logic [1:0] addr;
-  logic wr_en;
-  logic rd_en;
-  logic [7:0] wdata;
-  logic [7:0] rdata;
+    if(str2.len>50) 
+      $display("illegally long string of length %d, truncating to 50 chars.",str2.len);
+
+    $display("original message string length = %d",str2.len);
+
+    for(lk = 0; lk<str2.len; lk++)
+      if(str2[lk]==8'h5f) continue;	       // count leading _ chars in string
+	  else break;                          // we shall add these to preamble pad length
+	  $display("embedded leading underscore count = %d",lk);
+
+    for(int nn=0; nn<64; nn++)			   // count leading underscores
+      if(str2[nn]==8'h5f) ct++; 
+	  else break;
+	  $display("ct = %d",ct);
+
+    $display("run encryption of this original message: ");
+    $display("%s",str2);             // print original message in transcript window
+
+    for(int j=0; j<64; j++) 			   // pre-fill message_padded with ASCII _ characters
+      pad[j] = 8'h5f;         
+    for(int l=0; l<str2.len; l++)  	 // overwrite up to 60 of these spaces w/ message itself
+      pad[pre_length+l] = byte'(str2[l]); 
+
+endfunction
+
+function logic [63:0][7:0] encrypt (
+    input logic [63:0][7:0] msg_padded2,
+    input int pat_sel,
+    input logic [5:0] LFSR_init  // for program 2 run
+  );
+
+    string      str_enc2[64];          // decryption program input
+    logic [5:0] LFSR_ptrn[6];		       // 6 possible maximal-length 6-bit LFSR tap ptrns
+    logic [63:0][7:0] msg_crypto2;
+    logic [5:0] lfsr_ptrn,
+                lfsr2[64];
+
+    // the 6 possible (constant) maximal-length feedback tap patterns from which to choose
+    LFSR_ptrn[0] = 6'h21;
+    LFSR_ptrn[1] = 6'h2D;
+    LFSR_ptrn[2] = 6'h30;
+    LFSR_ptrn[3] = 6'h33;
+    LFSR_ptrn[4] = 6'h36;
+    LFSR_ptrn[5] = 6'h39;
+
+    // select LFSR tap pattern
+    // ***** choose any value < 6 *****
+    
+    if(pat_sel > 5) begin 
+      $display("illegal pattern select chosen, overriding with 3");
+      pat_sel = 3;                         // overrides illegal selections
+    end  
+    else
+      $display("tap pattern %d selected",pat_sel);
+
+    // set starting LFSR state for program -- 
+    // ***** choose any 6-bit nonzero value *****
+    if(!LFSR_init) begin
+      $display("illegal zero LFSR start pattern chosen, overriding with 6'h01");
+      LFSR_init = 6'h01;                   // override 0 with a legal (nonzero) value
+    end
+    else
+      $display("LFSR starting pattern = %b",LFSR_init);
+
+    // precompute encrypted message
+	  lfsr_ptrn = LFSR_ptrn[pat_sel];        // select one of the 6 permitted tap ptrns
+
+	  lfsr2[0]     = LFSR_init;              // any nonzero value (zero may be helpful for debug)
+    $display();
+    $display("LFSR_ptrn = %h, LFSR_init = %h %h",lfsr_ptrn,LFSR_init,lfsr2[0]);
+
+    // compute the LFSR sequence
+    for (int ii=0;ii<63;ii++) begin :lfsr_loop
+      lfsr2[ii+1] = (lfsr2[ii]<<1)+(^(lfsr2[ii]&lfsr_ptrn));//{LFSR[6:0],(^LFSR[5:3]^LFSR[7])};		   // roll the rolling code
+    //      $display("lfsr_ptrn %d = %h",ii,lfsr2[ii]);
+    end	  :lfsr_loop
+
+    // encrypt the message
+    for (int i=0; i<64; i++) begin		   // testbench will change on falling clocks
+      msg_crypto2[i]        = msg_padded2[i] ^ lfsr2[i];  //{1'b0,LFSR[6:0]};	   // encrypt 7 LSBs
+      str_enc2[i]           = string'(msg_crypto2[i]);
+    end
+    $display("here is the original message with _ preamble padding");
+
+    for(int jj=0; jj<64; jj++)
+      $write("%s",msg_padded2[jj]);
+    $display("\n");
+    $display("here is the padded and encrypted pattern in ASCII");
+
+    for(int jj=0; jj<64; jj++)
+        $write("%s",str_enc2[jj]);
+    $display("\n");
+    $display("here is the padded pattern in hex"); 
+
+	  for(int jj=0; jj<64; jj++)
+      $write(" %h",msg_padded2[jj]);
+	  $display("\n");
+
+    return msg_crypto2;
+
+endfunction
+
+interface dec_if (input logic clk);
+
+  logic       init;
+  logic       wr_en;
+  logic[7:0]  raddr, 
+              waddr,
+              data_in;
+  logic[7:0]  data_out;
+  logic       done;
+  bit         reading;
   
   clocking driver_cb @(posedge clk);
     default input #1 output #1;
-    output addr;
+    output init;
     output wr_en;
-    output rd_en;
-    output wdata;
-    input  rdata;  
+    output raddr; 
+    output waddr;
+    output data_in;
+    input  data_out;
+    input  done;
+    output reading;
   endclocking
   
   clocking monitor_cb @(posedge clk);
     default input #1 output #1;
-    input addr;
+    input init;
     input wr_en;
-    input rd_en;
-    input wdata;
-    input rdata;  
+    input raddr; 
+    input waddr;
+    input data_in;
+    input data_out;
+    input done;
+    input reading;
   endclocking
   
-  modport DRIVER  (clocking driver_cb,input clk,reset);
-  modport MONITOR (clocking monitor_cb,input clk,reset);
+  modport DRIVER  (clocking driver_cb,  input clk);
+  modport MONITOR (clocking monitor_cb, input clk);
 
 endinterface
 
@@ -64,28 +165,49 @@ endinterface
 //-------------------------------------------------------------------------
 
 class dec_seq_item extends uvm_sequence_item;
-  //data and control fields
-  rand bit [1:0] addr;
-  rand bit       wr_en;
-  rand bit       rd_en;
-  rand bit [7:0] wdata;
-       bit [7:0] rdata;
+
+  rand bit  unsigned [7:0] pre_length;
+  rand int  unsigned pat_sel;
+  rand bit  unsigned [5:0] LFSR_init;
+  rand byte unsigned temp[];
+
+  logic [63:0][7:0] msg_crypto2   ,          // encrypted message according to the DUT
+                    msg_decryp2   ,          // recovered decrypted message from DUT
+                    msg_padded2   ;
   
   //Utility and Field macros
   `uvm_object_utils_begin(dec_seq_item)
-    `uvm_field_int(addr,UVM_ALL_ON)
-    `uvm_field_int(wr_en,UVM_ALL_ON)
-    `uvm_field_int(rd_en,UVM_ALL_ON)
-    `uvm_field_int(wdata,UVM_ALL_ON)
+    `uvm_field_int(pre_length,UVM_ALL_ON)
+    `uvm_field_int(pat_sel,UVM_ALL_ON)
+    `uvm_field_int(LFSR_init,UVM_ALL_ON)
+    // `uvm_field_int(temp,UVM_ALL_ON)
+    `uvm_field_int(msg_crypto2,UVM_ALL_ON)
+    `uvm_field_int(msg_decryp2,UVM_ALL_ON)
+    `uvm_field_int(msg_padded2,UVM_ALL_ON)
   `uvm_object_utils_end
   
   //Constructor
   function new(string name = "dec_seq_item");
     super.new(name);
+    pre_length = 10;    // values 7 to 63 recommclearended
+    pat_sel =  2;
+    LFSR_init = 6'h01;  // for program 2 run
   endfunction
   
   //constaint, to generate any one among write and read
-  constraint wr_rd_c { wr_en != rd_en; }; 
+  constraint pre_length_c { pre_length  >=7 && pre_length <= 63; } // values 7 to 63 recommended
+  constraint pat_sel_size { pat_sel < 6; }
+  constraint LFSR_init_non_zero { LFSR_init !=0; }
+  constraint str_len { temp.size() < 50; } // Length of the string
+  constraint str_ascii { foreach(temp[i]) temp[i] inside {[65:90], [97:122]}; } //To restrict between 'A-Z' and 'a-z'
+  constraint padded_len { pre_length + temp.size() <= 50; }
+
+  function string get_str();
+      string str;
+      foreach(temp[i]) str = {str, string'(temp[i])};
+      return str;
+      // return "Mr_Watson_come_here_I_want_to_see_you";
+  endfunction
   
 endclass
 
@@ -131,58 +253,58 @@ class dec_sequence extends uvm_sequence#(dec_seq_item);
   endtask
 endclass
 
-// write_sequence - "write" type
-class write_sequence extends uvm_sequence#(dec_seq_item);
+// // write_sequence - "write" type
+// class write_sequence extends uvm_sequence#(dec_seq_item);
   
-  `uvm_object_utils(write_sequence)
+//   `uvm_object_utils(write_sequence)
    
-  //Constructor
-  function new(string name = "write_sequence");
-    super.new(name);
-  endfunction
+//   //Constructor
+//   function new(string name = "write_sequence");
+//     super.new(name);
+//   endfunction
   
-  virtual task body();
-    `uvm_do_with(req,{req.wr_en==1;})
-  endtask
-endclass
+//   virtual task body();
+//     `uvm_do_with(req,{req.wr_en==1;})
+//   endtask
+// endclass
 
-// read_sequence - "read" type
-class read_sequence extends uvm_sequence#(dec_seq_item);
+// // read_sequence - "read" type
+// class read_sequence extends uvm_sequence#(dec_seq_item);
   
-  `uvm_object_utils(read_sequence)
+//   `uvm_object_utils(read_sequence)
    
-  //Constructor
-  function new(string name = "read_sequence");
-    super.new(name);
-  endfunction
+//   //Constructor
+//   function new(string name = "read_sequence");
+//     super.new(name);
+//   endfunction
   
-  virtual task body();
-    `uvm_do_with(req,{req.rd_en==1;})
-  endtask
-endclass
+//   virtual task body();
+//     `uvm_do_with(req,{req.rd_en==1;})
+//   endtask
+// endclass
 
-// write_read_sequence - "write" followed by "read" 
-class write_read_sequence extends uvm_sequence#(dec_seq_item);
+// // write_read_sequence - "write" followed by "read" 
+// class write_read_sequence extends uvm_sequence#(dec_seq_item);
   
-  `uvm_object_utils(write_read_sequence)
+//   `uvm_object_utils(write_read_sequence)
    
-  //Constructor
-  function new(string name = "write_read_sequence");
-    super.new(name);
-  endfunction
+//   //Constructor
+//   function new(string name = "write_read_sequence");
+//     super.new(name);
+//   endfunction
   
-  virtual task body();
-    `uvm_do_with(req,{req.wr_en==1;})
-    `uvm_do_with(req,{req.rd_en==1;})
-  endtask
-endclass
+//   virtual task body();
+//     `uvm_do_with(req,{req.wr_en==1;})
+//     `uvm_do_with(req,{req.rd_en==1;})
+//   endtask
+// endclass
 
 // wr_rd_sequence - "write" followed by "read" (sequence's inside sequences)
 class wr_rd_sequence extends uvm_sequence#(dec_seq_item);
   
-  //Declaring sequences
-  write_sequence wr_seq;
-  read_sequence  rd_seq;
+  // //Declaring sequences
+  // write_sequence wr_seq;
+  // read_sequence  rd_seq;
   
   `uvm_object_utils(wr_rd_sequence)
    
@@ -192,8 +314,9 @@ class wr_rd_sequence extends uvm_sequence#(dec_seq_item);
   endfunction
   
   virtual task body();
-    `uvm_do(wr_seq)
-    `uvm_do(rd_seq)
+    `uvm_do_with(req,{})
+    // `uvm_do(wr_seq)
+    // `uvm_do(rd_seq)
   endtask
 endclass
 
@@ -205,6 +328,11 @@ endclass
 `define DRIV_IF vif.DRIVER.driver_cb
 
 class dec_driver extends uvm_driver #(dec_seq_item);
+
+  string      str2 = "abc"   ;          // decrypted string will go here
+  logic [63:0][7:0] msg_crypto2   ,          // encrypted message according to the DUT
+                    msg_decryp2   ,          // recovered decrypted message from DUT
+                    msg_padded2   ;
 
   // Virtual Interface
   virtual dec_if vif;
@@ -234,24 +362,59 @@ class dec_driver extends uvm_driver #(dec_seq_item);
   // drive - transaction level to signal level
   // drives the value's from seq_item to interface signals
   virtual task drive();
-    `DRIV_IF.wr_en <= 0;
-    `DRIV_IF.rd_en <= 0;
-    @(posedge vif.DRIVER.clk);
+
+      str2 = req.get_str();
+      // uvm_config_db#(string)::set(this, "uvm_test_top", "str2", str2);
+      uvm_config_db#(string)::set(uvm_root::get(),"*","str2",str2);
+      
+      msg_padded2 = pad(.str2(str2), .pre_length(req.pre_length));
+      msg_crypto2 = encrypt(.msg_padded2(msg_padded2), .pat_sel(req.pat_sel), .LFSR_init(req.LFSR_init));
+
+      `DRIV_IF.init  <= 'b1;
+      `DRIV_IF.wr_en <= 'b0;
+
+      repeat(5) @(posedge vif.DRIVER.clk);
+
+      for(int qp=0; qp<64; qp++) begin
+        @(posedge vif.DRIVER.clk);
+        `DRIV_IF.wr_en   <= 'b1;                   // turn on memory write enable
+        `DRIV_IF.waddr   <= qp+64;                 // write encrypted message to mem [64:127]
+        `DRIV_IF.data_in <= msg_crypto2[qp];
+      end
+
+      @(posedge vif.DRIVER.clk) `DRIV_IF.wr_en <= 'b0;                   // turn off mem write for rest of simulation
+      @(posedge vif.DRIVER.clk) `DRIV_IF.init  <= 0 ;
+
+      repeat(6) @(posedge vif.DRIVER.clk);              // wait for 6 clock cycles of nominal 10ns each
+      wait(`DRIV_IF.done);                            // wait for DUT's done flag to go high
+      
+      #10ns $display("done at time %t",$time);
+
+      `DRIV_IF.reading <= 1;
+      for(int n=0; n<str2.len+1; n++)
+        @(posedge vif.DRIVER.clk) `DRIV_IF.raddr <= n;
+
+      @(posedge vif.DRIVER.clk) `DRIV_IF.reading <= 0;
+      @(posedge vif.DRIVER.clk);
+
+    // `DRIV_IF.wr_en <= 0;
+    // `DRIV_IF.rd_en <= 0;
+    // @(posedge vif.DRIVER.clk);
     
-    `DRIV_IF.addr <= req.addr;
+    // `DRIV_IF.addr <= req.addr;
     
-    if(req.wr_en) begin // write operation
-      `DRIV_IF.wr_en <= req.wr_en;
-      `DRIV_IF.wdata <= req.wdata;
-      @(posedge vif.DRIVER.clk);
-    end
-    else if(req.rd_en) begin //read operation
-      `DRIV_IF.rd_en <= req.rd_en;
-      @(posedge vif.DRIVER.clk);
-      `DRIV_IF.rd_en <= 0;
-      @(posedge vif.DRIVER.clk);
-      req.rdata = `DRIV_IF.rdata;
-    end
+    // if(req.wr_en) begin // write operation
+    //   `DRIV_IF.wr_en <= req.wr_en;
+    //   `DRIV_IF.wdata <= req.wdata;
+    //   @(posedge vif.DRIVER.clk);
+    // end
+    // else if(req.rd_en) begin //read operation
+    //   `DRIV_IF.rd_en <= req.rd_en;
+    //   @(posedge vif.DRIVER.clk);
+    //   `DRIV_IF.rd_en <= 0;
+    //   @(posedge vif.DRIVER.clk);
+    //   req.rdata = `DRIV_IF.rdata;
+    // end
     
   endtask : drive
 endclass : dec_driver
@@ -293,22 +456,30 @@ class dec_monitor extends uvm_monitor;
   // i.e, sample the values on interface signal ans assigns to transaction class fields
   virtual task run_phase(uvm_phase phase);
     forever begin
-      @(posedge vif.MONITOR.clk);
-      wait(vif.monitor_cb.wr_en || vif.monitor_cb.rd_en);
-        trans_collected.addr = vif.monitor_cb.addr;
-      if(vif.monitor_cb.wr_en) begin
-        trans_collected.wr_en = vif.monitor_cb.wr_en;
-        trans_collected.wdata = vif.monitor_cb.wdata;
-        trans_collected.rd_en = 0;
-        @(posedge vif.MONITOR.clk);
+
+      wait(vif.monitor_cb.reading);
+      while (vif.monitor_cb.reading) begin
+        @(posedge vif.MONITOR.clk)
+        trans_collected.msg_decryp2[vif.monitor_cb.raddr] = vif.monitor_cb.data_out;
+        $display ("monitor reading %d %d", vif.monitor_cb.raddr, vif.monitor_cb.data_out); //msg_decryp2[raddr-1] <= data_out;
       end
-      if(vif.monitor_cb.rd_en) begin
-        trans_collected.rd_en = vif.monitor_cb.rd_en;
-        trans_collected.wr_en = 0;
-        @(posedge vif.MONITOR.clk);
-        @(posedge vif.MONITOR.clk);
-        trans_collected.rdata = vif.monitor_cb.rdata;
-      end
+
+      // @(posedge vif.MONITOR.clk);
+      // wait(vif.monitor_cb.wr_en || vif.monitor_cb.rd_en);
+      //   trans_collected.addr = vif.monitor_cb.addr;
+      // if(vif.monitor_cb.wr_en) begin
+      //   trans_collected.wr_en = vif.monitor_cb.wr_en;
+      //   trans_collected.wdata = vif.monitor_cb.wdata;
+      //   trans_collected.rd_en = 0;
+      //   @(posedge vif.MONITOR.clk);
+      // end
+      // if(vif.monitor_cb.rd_en) begin
+      //   trans_collected.rd_en = vif.monitor_cb.rd_en;
+      //   trans_collected.wr_en = 0;
+      //   @(posedge vif.MONITOR.clk);
+      //   @(posedge vif.MONITOR.clk);
+      //   trans_collected.rdata = vif.monitor_cb.rdata;
+      // end
     item_collected_port.write(trans_collected);
       end 
   endtask : run_phase
@@ -366,8 +537,9 @@ class dec_scoreboard extends uvm_scoreboard;
   // declaring pkt_qu to store the pkt's recived from monitor
   dec_seq_item pkt_qu[$];
   
-  // sc_dec 
-  bit [7:0] sc_dec [4];
+  
+  // // sc_dec 
+  // bit [7:0] sc_dec [4];
 
   //port to recive packets from monitor
   uvm_analysis_imp#(dec_seq_item, dec_scoreboard) item_collected_export;
@@ -381,7 +553,10 @@ class dec_scoreboard extends uvm_scoreboard;
   function void build_phase(uvm_phase phase);
     super.build_phase(phase);
       item_collected_export = new("item_collected_export", this);
-      foreach(sc_dec[i]) sc_dec[i] = 8'hFF;
+      // foreach(sc_dec[i]) sc_dec[i] = 8'hFF;
+
+      // if(uvm_config_db #(string):: get (this, "uvm_test_top", "str2", str2))
+      //   `uvm_info("ENV", $sformatf("Found %s", str2), UVM_MEDIUM);
   endfunction: build_phase
   
   // write task - recives the pkt from monitor and pushes into queue
@@ -394,32 +569,47 @@ class dec_scoreboard extends uvm_scoreboard;
   // local decory will be updated on the write operation.
   virtual task run_phase(uvm_phase phase);
     dec_seq_item dec_pkt;
+    string str_dec2;
+    string str2;
     
     forever begin
       wait(pkt_qu.size() > 0);
       dec_pkt = pkt_qu.pop_front();
+
+     if(!uvm_config_db#(string)::get(this, "", "str2", str2))
+       `uvm_fatal("NO_STR",{"no str found"});
+
+      str_dec2 = "";
+      for(int rr=0; rr<str2.len; rr++)
+        str_dec2 = {str_dec2, string'(dec_pkt.msg_decryp2[rr])};
+
+      $display ("Original message: %s, Decoded message: %s , len %d", str2, str_dec2, str2.len);
+      assert (str_dec2 == str2) 
+        $display ("\n - DECRYPTION SUCCESSFUL\n");
+      else
+        $fatal ("\n - DECRYPTION FAILED. Sent: %s, Got: %s \n", str2, str_dec2);
       
-      if(dec_pkt.wr_en) begin
-        sc_dec[dec_pkt.addr] = dec_pkt.wdata;
-        `uvm_info(get_type_name(),$sformatf("------ :: WRITE DATA       :: ------"),UVM_LOW)
-        `uvm_info(get_type_name(),$sformatf("Addr: %0h",dec_pkt.addr),UVM_LOW)
-        `uvm_info(get_type_name(),$sformatf("Data: %0h",dec_pkt.wdata),UVM_LOW)
-        `uvm_info(get_type_name(),"------------------------------------",UVM_LOW)        
-      end
-      else if(dec_pkt.rd_en) begin
-        if(sc_dec[dec_pkt.addr] == dec_pkt.rdata) begin
-          `uvm_info(get_type_name(),$sformatf("------ :: READ DATA Match :: ------"),UVM_LOW)
-          `uvm_info(get_type_name(),$sformatf("Addr: %0h",dec_pkt.addr),UVM_LOW)
-          `uvm_info(get_type_name(),$sformatf("Expected Data: %0h Actual Data: %0h",sc_dec[dec_pkt.addr],dec_pkt.rdata),UVM_LOW)
-          `uvm_info(get_type_name(),"------------------------------------",UVM_LOW)
-        end
-        else begin
-          `uvm_error(get_type_name(),"------ :: READ DATA MisMatch :: ------")
-          `uvm_info(get_type_name(),$sformatf("Addr: %0h",dec_pkt.addr),UVM_LOW)
-          `uvm_info(get_type_name(),$sformatf("Expected Data: %0h Actual Data: %0h",sc_dec[dec_pkt.addr],dec_pkt.rdata),UVM_LOW)
-          `uvm_info(get_type_name(),"------------------------------------",UVM_LOW)
-        end
-      end
+      // if(dec_pkt.wr_en) begin
+      //   sc_dec[dec_pkt.addr] = dec_pkt.wdata;
+      //   `uvm_info(get_type_name(),$sformatf("------ :: WRITE DATA       :: ------"),UVM_LOW)
+      //   `uvm_info(get_type_name(),$sformatf("Addr: %0h",dec_pkt.addr),UVM_LOW)
+      //   `uvm_info(get_type_name(),$sformatf("Data: %0h",dec_pkt.wdata),UVM_LOW)
+      //   `uvm_info(get_type_name(),"------------------------------------",UVM_LOW)        
+      // end
+      // else if(dec_pkt.rd_en) begin
+      //   if(sc_dec[dec_pkt.addr] == dec_pkt.rdata) begin
+      //     `uvm_info(get_type_name(),$sformatf("------ :: READ DATA Match :: ------"),UVM_LOW)
+      //     `uvm_info(get_type_name(),$sformatf("Addr: %0h",dec_pkt.addr),UVM_LOW)
+      //     `uvm_info(get_type_name(),$sformatf("Expected Data: %0h Actual Data: %0h",sc_dec[dec_pkt.addr],dec_pkt.rdata),UVM_LOW)
+      //     `uvm_info(get_type_name(),"------------------------------------",UVM_LOW)
+      //   end
+      //   else begin
+      //     `uvm_error(get_type_name(),"------ :: READ DATA MisMatch :: ------")
+      //     `uvm_info(get_type_name(),$sformatf("Addr: %0h",dec_pkt.addr),UVM_LOW)
+      //     `uvm_info(get_type_name(),$sformatf("Expected Data: %0h Actual Data: %0h",sc_dec[dec_pkt.addr],dec_pkt.rdata),UVM_LOW)
+      //     `uvm_info(get_type_name(),"------------------------------------",UVM_LOW)
+      //   end
+      // end
     end
   endtask : run_phase
 endclass : dec_scoreboard
@@ -546,27 +736,22 @@ class dec_wr_rd_test extends dec_model_base_test;
 endclass : dec_wr_rd_test
 
 
-module tb_top;
+module uvm_test_top;
 
-  bit clk, reset;
-
+  bit clk = 0;
   always #5 clk = ~clk;
-  
-  initial begin
-    reset = 1;
-    #5 reset =0;
-  end
-  
-  dec_if intf(clk,reset);
 
-  decory DUT (
-    .clk(intf.clk),
-    .reset(intf.reset),
-    .addr(intf.addr),
-    .wr_en(intf.wr_en),
-    .rd_en(intf.rd_en),
-    .wdata(intf.wdata),
-    .rdata(intf.rdata)
+  dec_if intf(clk);
+
+  top_level_4_260 DUT (
+    .clk      (intf.clk     ),
+    .init     (intf.init    ),
+    .wr_en    (intf.wr_en   ),
+    .raddr    (intf.raddr   ),
+    .waddr    (intf.waddr   ),
+    .data_in  (intf.data_in ),
+    .data_out (intf.data_out),
+    .done     (intf.done    )
    );
   
   initial begin 
