@@ -602,18 +602,19 @@ endclass : dec_model_base_test
 
 
 //-------------------------------------------------------------------------
-//            Write Read test
+//            All tests
 //-------------------------------------------------------------------------
 
-class dec_test extends dec_model_base_test;
+class all_test extends dec_model_base_test;
 
-  `uvm_component_utils(dec_test)
+  `uvm_component_utils(all_test)
   
   // sequence instance 
-  dec_sequence seq;
+  mem_rw_sequence rw_seq;
+  dec_sequence dec_seq;
 
   // constructor
-  function new(string name = "dec_test",uvm_component parent=null);
+  function new(string name = "all_test",uvm_component parent=null);
     super.new(name,parent);
   endfunction : new
 
@@ -622,59 +623,23 @@ class dec_test extends dec_model_base_test;
     super.build_phase(phase);
 
     // Create the sequence
-    seq = dec_sequence::type_id::create("seq");
+    rw_seq = mem_rw_sequence::type_id::create("rw_seq");
+    dec_seq = dec_sequence::type_id::create("dec_seq");
   endfunction : build_phase
   
   // run_phase - starting the test
   task run_phase(uvm_phase phase);
     
     phase.raise_objection(this);
-      seq.start(env.dec_agnt.sequencer);
+      rw_seq.start(env.dec_agnt.sequencer);
+      dec_seq.start(env.dec_agnt.sequencer);
     phase.drop_objection(this);
     
     //set a drain-time for the environment if desired
     phase.phase_done.set_drain_time(this, 50);
   endtask : run_phase
   
-endclass : dec_test
-
-
-//-------------------------------------------------------------------------
-//            Memory Read Write test
-//-------------------------------------------------------------------------
-
-class mem_rw_test extends dec_model_base_test;
-
-  `uvm_component_utils(mem_rw_test)
-  
-  // sequence instance 
-  mem_rw_sequence seq;
-
-  // constructor
-  function new(string name = "mem_rw_test",uvm_component parent=null);
-    super.new(name,parent);
-  endfunction : new
-
-  // build_phase
-  virtual function void build_phase(uvm_phase phase);
-    super.build_phase(phase);
-
-    // Create the sequence
-    seq = mem_rw_sequence::type_id::create("seq");
-  endfunction : build_phase
-  
-  // run_phase - starting the test
-  task run_phase(uvm_phase phase);
-    
-    phase.raise_objection(this);
-      seq.start(env.dec_agnt.sequencer);
-    phase.drop_objection(this);
-    
-    //set a drain-time for the environment if desired
-    phase.phase_done.set_drain_time(this, 50);
-  endtask : run_phase
-  
-endclass : mem_rw_test
+endclass : all_test
 
 
 module uvm_test_top;
@@ -702,7 +667,6 @@ module uvm_test_top;
   end
   
   initial begin 
-    // run_test("dec_test");
-    run_test("mem_rw_test");
+    run_test("all_test");
   end
 endmodule
