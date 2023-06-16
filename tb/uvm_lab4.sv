@@ -253,58 +253,8 @@ class dec_sequence extends uvm_sequence#(dec_seq_item);
   endtask
 endclass
 
-// // write_sequence - "write" type
-// class write_sequence extends uvm_sequence#(dec_seq_item);
-  
-//   `uvm_object_utils(write_sequence)
-   
-//   //Constructor
-//   function new(string name = "write_sequence");
-//     super.new(name);
-//   endfunction
-  
-//   virtual task body();
-//     `uvm_do_with(req,{req.wr_en==1;})
-//   endtask
-// endclass
-
-// // read_sequence - "read" type
-// class read_sequence extends uvm_sequence#(dec_seq_item);
-  
-//   `uvm_object_utils(read_sequence)
-   
-//   //Constructor
-//   function new(string name = "read_sequence");
-//     super.new(name);
-//   endfunction
-  
-//   virtual task body();
-//     `uvm_do_with(req,{req.rd_en==1;})
-//   endtask
-// endclass
-
-// // write_read_sequence - "write" followed by "read" 
-// class write_read_sequence extends uvm_sequence#(dec_seq_item);
-  
-//   `uvm_object_utils(write_read_sequence)
-   
-//   //Constructor
-//   function new(string name = "write_read_sequence");
-//     super.new(name);
-//   endfunction
-  
-//   virtual task body();
-//     `uvm_do_with(req,{req.wr_en==1;})
-//     `uvm_do_with(req,{req.rd_en==1;})
-//   endtask
-// endclass
-
 // wr_rd_sequence - "write" followed by "read" (sequence's inside sequences)
 class wr_rd_sequence extends uvm_sequence#(dec_seq_item);
-  
-  // //Declaring sequences
-  // write_sequence wr_seq;
-  // read_sequence  rd_seq;
   
   `uvm_object_utils(wr_rd_sequence)
    
@@ -315,8 +265,6 @@ class wr_rd_sequence extends uvm_sequence#(dec_seq_item);
   
   virtual task body();
     `uvm_do_with(req,{})
-    // `uvm_do(wr_seq)
-    // `uvm_do(rd_seq)
   endtask
 endclass
 
@@ -325,7 +273,7 @@ endclass
 //            Driver
 //-------------------------------------------------------------------------
 
-`define DRIV_IF vif.DRIVER.driver_cb
+`define DRIV_IF vif.driver_cb
 
 class dec_driver extends uvm_driver #(dec_seq_item);
 
@@ -397,25 +345,6 @@ class dec_driver extends uvm_driver #(dec_seq_item);
       @(posedge vif.DRIVER.clk) `DRIV_IF.reading <= 0;
       @(posedge vif.DRIVER.clk);
 
-    // `DRIV_IF.wr_en <= 0;
-    // `DRIV_IF.rd_en <= 0;
-    // @(posedge vif.DRIVER.clk);
-    
-    // `DRIV_IF.addr <= req.addr;
-    
-    // if(req.wr_en) begin // write operation
-    //   `DRIV_IF.wr_en <= req.wr_en;
-    //   `DRIV_IF.wdata <= req.wdata;
-    //   @(posedge vif.DRIVER.clk);
-    // end
-    // else if(req.rd_en) begin //read operation
-    //   `DRIV_IF.rd_en <= req.rd_en;
-    //   @(posedge vif.DRIVER.clk);
-    //   `DRIV_IF.rd_en <= 0;
-    //   @(posedge vif.DRIVER.clk);
-    //   req.rdata = `DRIV_IF.rdata;
-    // end
-    
   endtask : drive
 endclass : dec_driver
 
@@ -464,22 +393,6 @@ class dec_monitor extends uvm_monitor;
         $display ("monitor reading %d %d", vif.monitor_cb.raddr, vif.monitor_cb.data_out); //msg_decryp2[raddr-1] <= data_out;
       end
 
-      // @(posedge vif.MONITOR.clk);
-      // wait(vif.monitor_cb.wr_en || vif.monitor_cb.rd_en);
-      //   trans_collected.addr = vif.monitor_cb.addr;
-      // if(vif.monitor_cb.wr_en) begin
-      //   trans_collected.wr_en = vif.monitor_cb.wr_en;
-      //   trans_collected.wdata = vif.monitor_cb.wdata;
-      //   trans_collected.rd_en = 0;
-      //   @(posedge vif.MONITOR.clk);
-      // end
-      // if(vif.monitor_cb.rd_en) begin
-      //   trans_collected.rd_en = vif.monitor_cb.rd_en;
-      //   trans_collected.wr_en = 0;
-      //   @(posedge vif.MONITOR.clk);
-      //   @(posedge vif.MONITOR.clk);
-      //   trans_collected.rdata = vif.monitor_cb.rdata;
-      // end
     item_collected_port.write(trans_collected);
       end 
   endtask : run_phase
@@ -536,10 +449,6 @@ class dec_scoreboard extends uvm_scoreboard;
   
   // declaring pkt_qu to store the pkt's recived from monitor
   dec_seq_item pkt_qu[$];
-  
-  
-  // // sc_dec 
-  // bit [7:0] sc_dec [4];
 
   //port to recive packets from monitor
   uvm_analysis_imp#(dec_seq_item, dec_scoreboard) item_collected_export;
@@ -553,10 +462,6 @@ class dec_scoreboard extends uvm_scoreboard;
   function void build_phase(uvm_phase phase);
     super.build_phase(phase);
       item_collected_export = new("item_collected_export", this);
-      // foreach(sc_dec[i]) sc_dec[i] = 8'hFF;
-
-      // if(uvm_config_db #(string):: get (this, "uvm_test_top", "str2", str2))
-      //   `uvm_info("ENV", $sformatf("Found %s", str2), UVM_MEDIUM);
   endfunction: build_phase
   
   // write task - recives the pkt from monitor and pushes into queue
@@ -588,28 +493,6 @@ class dec_scoreboard extends uvm_scoreboard;
         $display ("\n - DECRYPTION SUCCESSFUL\n");
       else
         $fatal ("\n - DECRYPTION FAILED. Sent: %s, Got: %s \n", str2, str_dec2);
-      
-      // if(dec_pkt.wr_en) begin
-      //   sc_dec[dec_pkt.addr] = dec_pkt.wdata;
-      //   `uvm_info(get_type_name(),$sformatf("------ :: WRITE DATA       :: ------"),UVM_LOW)
-      //   `uvm_info(get_type_name(),$sformatf("Addr: %0h",dec_pkt.addr),UVM_LOW)
-      //   `uvm_info(get_type_name(),$sformatf("Data: %0h",dec_pkt.wdata),UVM_LOW)
-      //   `uvm_info(get_type_name(),"------------------------------------",UVM_LOW)        
-      // end
-      // else if(dec_pkt.rd_en) begin
-      //   if(sc_dec[dec_pkt.addr] == dec_pkt.rdata) begin
-      //     `uvm_info(get_type_name(),$sformatf("------ :: READ DATA Match :: ------"),UVM_LOW)
-      //     `uvm_info(get_type_name(),$sformatf("Addr: %0h",dec_pkt.addr),UVM_LOW)
-      //     `uvm_info(get_type_name(),$sformatf("Expected Data: %0h Actual Data: %0h",sc_dec[dec_pkt.addr],dec_pkt.rdata),UVM_LOW)
-      //     `uvm_info(get_type_name(),"------------------------------------",UVM_LOW)
-      //   end
-      //   else begin
-      //     `uvm_error(get_type_name(),"------ :: READ DATA MisMatch :: ------")
-      //     `uvm_info(get_type_name(),$sformatf("Addr: %0h",dec_pkt.addr),UVM_LOW)
-      //     `uvm_info(get_type_name(),$sformatf("Expected Data: %0h Actual Data: %0h",sc_dec[dec_pkt.addr],dec_pkt.rdata),UVM_LOW)
-      //     `uvm_info(get_type_name(),"------------------------------------",UVM_LOW)
-      //   end
-      // end
     end
   endtask : run_phase
 endclass : dec_scoreboard
