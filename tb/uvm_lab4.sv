@@ -77,7 +77,7 @@ class dec_seq_item extends uvm_sequence_item;
   constraint padded_len { pre_length + temp.size() <= 50; }
 
 
-  logic [63:0][7:0] msg_padded2, msg_crypto2, msg_decryp2;
+  logic [255:0][7:0] msg_padded2, msg_crypto2, msg_decryp2;
   string      str_enc2[64];          // decryption program input
   logic [5:0] LFSR_ptrn[6];		       // 6 possible maximal-length 6-bit LFSR tap ptrns
   logic [5:0] lfsr_ptrn, lfsr2[64];
@@ -161,7 +161,14 @@ class dec_seq_item extends uvm_sequence_item;
     //   $write(" %h",msg_padded2[jj]);
 	  // $display("\n");
 
-endfunction
+  endfunction
+
+
+  rand bit [255:0][7:0] mem_data;
+
+  // function checksum ();
+  // endfunction
+
   
 endclass
 
@@ -180,8 +187,9 @@ class dec_sequencer extends uvm_sequencer#(dec_seq_item);
   
 endclass
 
+
 //-------------------------------------------------------------------------
-//            Sequence
+//            Sequence: Decryption
 //-------------------------------------------------------------------------
 
 class dec_sequence extends uvm_sequence#(dec_seq_item);
@@ -204,6 +212,7 @@ class dec_sequence extends uvm_sequence#(dec_seq_item);
     req.randomize();
     req.encrypt();
     uvm_config_db#(string)::set(uvm_root::get(),"*","str2",req.str2);
+    uvm_config_db#(bit)::set(uvm_root::get(),"*","is_mem_rw_test",1'b0);
 
     send_request(req);
     wait_for_item_done();
@@ -213,12 +222,45 @@ endclass
 
 
 //-------------------------------------------------------------------------
+//            Sequence: Memory Readback
+//-------------------------------------------------------------------------
+
+class mem_rw_sequence extends uvm_sequence#(dec_seq_item);
+  
+  `uvm_object_utils(mem_rw_sequence)
+  
+  //Constructor
+  function new(string name = "mem_rw_sequence");
+    super.new(name);
+  endfunction
+  
+  `uvm_declare_p_sequencer(dec_sequencer)
+  
+  // create, randomize and send the item to driver
+  virtual task body();
+   repeat(100) begin
+      wait_for_grant();
+
+      req = dec_seq_item::type_id::create("req");
+      req.randomize();
+      uvm_config_db#(bit [255:0][7:0])::set(uvm_root::get(),"*","mem_data",req.mem_data);
+      uvm_config_db#(bit)::set(uvm_root::get(),"*","is_mem_rw_test",1'b1);
+
+      send_request(req);
+      wait_for_item_done();
+   end 
+  endtask
+endclass
+
+//-------------------------------------------------------------------------
 //            Driver
 //-------------------------------------------------------------------------
 
 `define DRIV_IF vif.driver_cb
 
 class dec_driver extends uvm_driver #(dec_seq_item);
+
+  bit is_mem_rw_test;
 
   // Virtual Interface
   virtual dec_if vif;
@@ -249,6 +291,30 @@ class dec_driver extends uvm_driver #(dec_seq_item);
   // drives the value's from seq_item to interface signals
   virtual task drive();
 
+    if(!uvm_config_db#(bit)::get(this, "", "is_mem_rw_test", is_mem_rw_test))
+        `uvm_fatal("NO_MEMDATA",{"no is_mem_rw_test found"});
+
+    if (is_mem_rw_test) begin
+      `DRIV_IF.init  <= 'b1;
+
+      for(int qp=0; qp<256; qp++) begin
+        @(posedge vif.DRIVER.clk);
+        `DRIV_IF.wr_en   <= 'b1; 
+        `DRIV_IF.waddr   <= qp;
+        `DRIV_IF.data_in <= req.mem_data[qp];
+      end
+
+      repeat(6) @(posedge vif.DRIVER.clk); 
+
+      `DRIV_IF.reading <= 1;
+      for(int n=0; n<256; n++)
+        @(posedge vif.DRIVER.clk) `DRIV_IF.raddr <= n;
+
+      @(posedge vif.DRIVER.clk) `DRIV_IF.reading <= 0;
+      repeat(100) @(posedge vif.DRIVER.clk);
+
+    end else begin
+
       `DRIV_IF.init  <= 'b1;
       `DRIV_IF.wr_en <= 'b0;
 
@@ -275,6 +341,8 @@ class dec_driver extends uvm_driver #(dec_seq_item);
 
       @(posedge vif.DRIVER.clk) `DRIV_IF.reading <= 0;
       repeat(100) @(posedge vif.DRIVER.clk);
+
+    end
 
   endtask : drive
 endclass : dec_driver
@@ -406,24 +474,44 @@ class dec_scoreboard extends uvm_scoreboard;
     dec_seq_item dec_pkt;
     string str_dec2;
     string str2;
+    bit is_mem_rw_test;
+    bit [255:0][7:0] mem_data;
     
     forever begin
       wait(pkt_qu.size() > 0);
       dec_pkt = pkt_qu.pop_front();
 
-     if(!uvm_config_db#(string)::get(this, "", "str2", str2))
-       `uvm_fatal("NO_STR",{"no str found"});
+      if(!uvm_config_db#(bit)::get(this, "", "is_mem_rw_test", is_mem_rw_test))
+        `uvm_fatal("NO_MRW",{"no is_mem_rw_test found"});
 
-      str_dec2 = "";
-      for(int rr=0; rr<str2.len; rr++)
-        str_dec2 = {str_dec2, string'(dec_pkt.msg_decryp2[rr])};
+      if (is_mem_rw_test) begin
 
-      $display ("Original message: %s, Decoded message: %s , len %d", str2, str_dec2, str2.len);
-      assert (str_dec2 == str2) 
-        $display ("\n - DECRYPTION SUCCESSFUL\n");
-      else begin
-        `uvm_error("ERROR", "failed");
-        $display ("\n - DECRYPTION FAILED. Sent: %s, Got: %s \n", str2, str_dec2);
+        if(!uvm_config_db#(bit [255:0][7:0])::get(this, "", "mem_data", mem_data))
+          `uvm_fatal("NO_MEMDATA",{"no mem data found"});
+
+        assert (dec_pkt.msg_decryp2 == mem_data) 
+          $display ("\n - MEM DATA MATCHES\n");
+        else begin
+          `uvm_error("ERROR", "Mem data failed");
+          $display ("\n - DECRYPTION FAILED. Sent: %d, Got: %d \n", mem_data, dec_pkt.msg_decryp2);
+        end
+
+      end else begin
+
+        if(!uvm_config_db#(string)::get(this, "", "str2", str2))
+          `uvm_fatal("NO_STR",{"no str found"});
+
+        str_dec2 = "";
+        for(int rr=0; rr<str2.len; rr++)
+          str_dec2 = {str_dec2, string'(dec_pkt.msg_decryp2[rr])};
+
+        $display ("Original message: %s, Decoded message: %s , len %d", str2, str_dec2, str2.len);
+        assert (str_dec2 == str2) 
+          $display ("\n - DECRYPTION SUCCESSFUL\n");
+        else begin
+          `uvm_error("ERROR", "Decryption failed");
+          $display ("\n - DECRYPTION FAILED. Sent: %s, Got: %s \n", str2, str_dec2);
+        end
       end
     end
   endtask : run_phase
@@ -517,15 +605,15 @@ endclass : dec_model_base_test
 //            Write Read test
 //-------------------------------------------------------------------------
 
-class dec_wr_rd_test extends dec_model_base_test;
+class dec_test extends dec_model_base_test;
 
-  `uvm_component_utils(dec_wr_rd_test)
+  `uvm_component_utils(dec_test)
   
   // sequence instance 
   dec_sequence seq;
 
   // constructor
-  function new(string name = "dec_wr_rd_test",uvm_component parent=null);
+  function new(string name = "dec_test",uvm_component parent=null);
     super.new(name,parent);
   endfunction : new
 
@@ -548,7 +636,45 @@ class dec_wr_rd_test extends dec_model_base_test;
     phase.phase_done.set_drain_time(this, 50);
   endtask : run_phase
   
-endclass : dec_wr_rd_test
+endclass : dec_test
+
+
+//-------------------------------------------------------------------------
+//            Memory Read Write test
+//-------------------------------------------------------------------------
+
+class mem_rw_test extends dec_model_base_test;
+
+  `uvm_component_utils(mem_rw_test)
+  
+  // sequence instance 
+  mem_rw_sequence seq;
+
+  // constructor
+  function new(string name = "mem_rw_test",uvm_component parent=null);
+    super.new(name,parent);
+  endfunction : new
+
+  // build_phase
+  virtual function void build_phase(uvm_phase phase);
+    super.build_phase(phase);
+
+    // Create the sequence
+    seq = mem_rw_sequence::type_id::create("seq");
+  endfunction : build_phase
+  
+  // run_phase - starting the test
+  task run_phase(uvm_phase phase);
+    
+    phase.raise_objection(this);
+      seq.start(env.dec_agnt.sequencer);
+    phase.drop_objection(this);
+    
+    //set a drain-time for the environment if desired
+    phase.phase_done.set_drain_time(this, 50);
+  endtask : run_phase
+  
+endclass : mem_rw_test
 
 
 module uvm_test_top;
@@ -576,6 +702,7 @@ module uvm_test_top;
   end
   
   initial begin 
-    run_test("dec_wr_rd_test");
+    // run_test("dec_test");
+    run_test("mem_rw_test");
   end
 endmodule
