@@ -1,105 +1,6 @@
 `include "uvm_macros.svh"
 import uvm_pkg::*;
 
-
-function logic [63:0][7:0] pad (
-  input string str2,
-  input logic [7:0] pre_length
-  );
-
-    int lk, ct;
-
-    // set preamble lengths for the program runs (always > 6)
-    // ***** choose any value > 6 *****
-    
-    if(pre_length < 7) begin
-      $display("illegal preamble length chosen, overriding with 8");
-      pre_length =  8;                     // override < 6 with a legal value
-    end else
-      $display("preamble length = %d",pre_length);
-
-    if(str2.len>50) 
-      $display("illegally long string of length %d, truncating to 50 chars.",str2.len);
-
-    $display("original message string length = %d",str2.len);
-
-    for(lk = 0; lk<str2.len; lk++)
-      if(str2[lk]==8'h5f) continue;	       // count leading _ chars in string
-	  else break;                          // we shall add these to preamble pad length
-	  $display("embedded leading underscore count = %d",lk);
-
-    for(int nn=0; nn<64; nn++)			   // count leading underscores
-      if(str2[nn]==8'h5f) ct++; 
-	  else break;
-	  $display("ct = %d",ct);
-
-    $display("run encryption of this original message: ");
-    $display("%s",str2);             // print original message in transcript window
-
-    for(int j=0; j<64; j++) 			   // pre-fill message_padded with ASCII _ characters
-      pad[j] = 8'h5f;         
-    for(int l=0; l<str2.len; l++)  	 // overwrite up to 60 of these spaces w/ message itself
-      pad[pre_length+l] = byte'(str2[l]); 
-
-endfunction
-
-function logic [63:0][7:0] encrypt (
-    input logic [63:0][7:0] msg_padded2,
-    input int pat_sel,
-    input logic [5:0] LFSR_init  // for program 2 run
-  );
-
-    string      str_enc2[64];          // decryption program input
-    logic [5:0] LFSR_ptrn[6];		       // 6 possible maximal-length 6-bit LFSR tap ptrns
-    logic [63:0][7:0] msg_crypto2;
-    logic [5:0] lfsr_ptrn,
-                lfsr2[64];
-
-    // the 6 possible (constant) maximal-length feedback tap patterns from which to choose
-    LFSR_ptrn[0] = 6'h21;
-    LFSR_ptrn[1] = 6'h2D;
-    LFSR_ptrn[2] = 6'h30;
-    LFSR_ptrn[3] = 6'h33;
-    LFSR_ptrn[4] = 6'h36;
-    LFSR_ptrn[5] = 6'h39;
-
-    // precompute encrypted message
-	  lfsr_ptrn = LFSR_ptrn[pat_sel];        // select one of the 6 permitted tap ptrns
-
-	  lfsr2[0]     = LFSR_init;              // any nonzero value (zero may be helpful for debug)
-    $display("LFSR_ptrn = %h, LFSR_init = %h %h",lfsr_ptrn,LFSR_init,lfsr2[0]);
-
-    // compute the LFSR sequence
-    for (int ii=0;ii<63;ii++) begin :lfsr_loop
-      lfsr2[ii+1] = (lfsr2[ii]<<1)+(^(lfsr2[ii]&lfsr_ptrn));//{LFSR[6:0],(^LFSR[5:3]^LFSR[7])};		   // roll the rolling code
-    //      $display("lfsr_ptrn %d = %h",ii,lfsr2[ii]);
-    end	  :lfsr_loop
-
-    // encrypt the message
-    for (int i=0; i<64; i++) begin		   // testbench will change on falling clocks
-      msg_crypto2[i]        = msg_padded2[i] ^ lfsr2[i];  //{1'b0,LFSR[6:0]};	   // encrypt 7 LSBs
-      str_enc2[i]           = string'(msg_crypto2[i]);
-    end
-    // $display("here is the original message with _ preamble padding");
-
-    // for(int jj=0; jj<64; jj++)
-    //   $write("%s",msg_padded2[jj]);
-    // $display("\n");
-    // $display("here is the padded and encrypted pattern in ASCII");
-
-    // for(int jj=0; jj<64; jj++)
-    //     $write("%s",str_enc2[jj]);
-    // $display("\n");
-    // $display("here is the padded pattern in hex"); 
-
-	  // for(int jj=0; jj<64; jj++)
-    //   $write(" %h",msg_padded2[jj]);
-	  // $display("\n");
-
-    return msg_crypto2;
-
-endfunction
-
 interface dec_if (input logic clk);
 
   logic       init;
@@ -146,14 +47,11 @@ endinterface
 
 class dec_seq_item extends uvm_sequence_item;
 
-  rand bit  unsigned [7:0] pre_length;
   rand int  unsigned pat_sel;
+  rand bit  unsigned [7:0] pre_length;
   rand bit  unsigned [5:0] LFSR_init;
   rand byte unsigned temp[];
 
-  logic [63:0][7:0] msg_crypto2   ,          // encrypted message according to the DUT
-                    msg_decryp2   ,          // recovered decrypted message from DUT
-                    msg_padded2   ;
   
   //Utility and Field macros
   `uvm_object_utils_begin(dec_seq_item)
@@ -161,9 +59,6 @@ class dec_seq_item extends uvm_sequence_item;
     `uvm_field_int(pat_sel,UVM_ALL_ON)
     `uvm_field_int(LFSR_init,UVM_ALL_ON)
     // `uvm_field_int(temp,UVM_ALL_ON)
-    `uvm_field_int(msg_crypto2,UVM_ALL_ON)
-    `uvm_field_int(msg_decryp2,UVM_ALL_ON)
-    `uvm_field_int(msg_padded2,UVM_ALL_ON)
   `uvm_object_utils_end
   
   //Constructor
@@ -181,12 +76,92 @@ class dec_seq_item extends uvm_sequence_item;
   constraint str_ascii { foreach(temp[i]) temp[i] inside {[65:90], [97:122]}; } //To restrict between 'A-Z' and 'a-z'
   constraint padded_len { pre_length + temp.size() <= 50; }
 
-  function string get_str();
-      string str;
-      foreach(temp[i]) str = {str, string'(temp[i])};
-      return str;
-      // return "Mr_Watson_come_here_I_want_to_see_you";
-  endfunction
+
+  logic [63:0][7:0] msg_padded2, msg_crypto2, msg_decryp2;
+  string      str_enc2[64];          // decryption program input
+  logic [5:0] LFSR_ptrn[6];		       // 6 possible maximal-length 6-bit LFSR tap ptrns
+  logic [5:0] lfsr_ptrn, lfsr2[64];
+  int lk, ct;
+  string str2;
+
+  function encrypt ();
+    // make string 
+    foreach(temp[i]) str2 = {str2, string'(temp[i])};
+
+    // set preamble lengths for the program runs (always > 6)
+    // ***** choose any value > 6 *****
+    
+    if(pre_length < 7) begin
+      $display("illegal preamble length chosen, overriding with 8");
+      pre_length =  8;                     // override < 6 with a legal value
+    end else
+      $display("preamble length = %d",pre_length);
+
+    if(str2.len>50) 
+      $display("illegally long string of length %d, truncating to 50 chars.",str2.len);
+
+    $display("original message string length = %d",str2.len);
+
+    for(lk = 0; lk<str2.len; lk++)
+      if(str2[lk]==8'h5f) continue;	       // count leading _ chars in string
+	  else break;                          // we shall add these to preamble pad length
+	  $display("embedded leading underscore count = %d",lk);
+
+    for(int nn=0; nn<64; nn++)			   // count leading underscores
+      if(str2[nn]==8'h5f) ct++; 
+	  else break;
+	  $display("ct = %d",ct);
+
+    $display("run encryption of this original message: ");
+    $display("%s",str2);             // print original message in transcript window
+
+    for(int j=0; j<64; j++) 			   // pre-fill message_padded with ASCII _ characters
+      msg_padded2[j] = 8'h5f;         
+    for(int l=0; l<str2.len; l++)  	 // overwrite up to 60 of these spaces w/ message itself
+      msg_padded2[pre_length+l] = byte'(str2[l]); 
+
+    // the 6 possible (constant) maximal-length feedback tap patterns from which to choose
+    LFSR_ptrn[0] = 6'h21;
+    LFSR_ptrn[1] = 6'h2D;
+    LFSR_ptrn[2] = 6'h30;
+    LFSR_ptrn[3] = 6'h33;
+    LFSR_ptrn[4] = 6'h36;
+    LFSR_ptrn[5] = 6'h39;
+
+    // precompute encrypted message
+	  lfsr_ptrn = LFSR_ptrn[pat_sel];        // select one of the 6 permitted tap ptrns
+
+	  lfsr2[0]     = LFSR_init;              // any nonzero value (zero may be helpful for debug)
+    $display("LFSR_ptrn = %h, LFSR_init = %h %h",lfsr_ptrn,LFSR_init,lfsr2[0]);
+
+    // compute the LFSR sequence
+    for (int ii=0;ii<63;ii++) begin :lfsr_loop
+      lfsr2[ii+1] = (lfsr2[ii]<<1)+(^(lfsr2[ii]&lfsr_ptrn));//{LFSR[6:0],(^LFSR[5:3]^LFSR[7])};		   // roll the rolling code
+    //      $display("lfsr_ptrn %d = %h",ii,lfsr2[ii]);
+    end	  :lfsr_loop
+
+    // encrypt the message
+    for (int i=0; i<64; i++) begin		   // testbench will change on falling clocks
+      msg_crypto2[i]        = msg_padded2[i] ^ lfsr2[i];  //{1'b0,LFSR[6:0]};	   // encrypt 7 LSBs
+      str_enc2[i]           = string'(msg_crypto2[i]);
+    end
+    // $display("here is the original message with _ preamble padding");
+
+    // for(int jj=0; jj<64; jj++)
+    //   $write("%s",msg_padded2[jj]);
+    // $display("\n");
+    // $display("here is the padded and encrypted pattern in ASCII");
+
+    // for(int jj=0; jj<64; jj++)
+    //     $write("%s",str_enc2[jj]);
+    // $display("\n");
+    // $display("here is the padded pattern in hex"); 
+
+	  // for(int jj=0; jj<64; jj++)
+    //   $write(" %h",msg_padded2[jj]);
+	  // $display("\n");
+
+endfunction
   
 endclass
 
@@ -222,10 +197,14 @@ class dec_sequence extends uvm_sequence#(dec_seq_item);
   
   // create, randomize and send the item to driver
   virtual task body();
-   repeat(10) begin
-    req = dec_seq_item::type_id::create("req");
+   repeat(100) begin
     wait_for_grant();
+
+    req = dec_seq_item::type_id::create("req");
     req.randomize();
+    req.encrypt();
+    uvm_config_db#(string)::set(uvm_root::get(),"*","str2",req.str2);
+
     send_request(req);
     wait_for_item_done();
    end 
@@ -240,11 +219,6 @@ endclass
 `define DRIV_IF vif.driver_cb
 
 class dec_driver extends uvm_driver #(dec_seq_item);
-
-  string      str2 = "abc"   ;          // decrypted string will go here
-  logic [63:0][7:0] msg_crypto2   ,          // encrypted message according to the DUT
-                    msg_decryp2   ,          // recovered decrypted message from DUT
-                    msg_padded2   ;
 
   // Virtual Interface
   virtual dec_if vif;
@@ -275,13 +249,6 @@ class dec_driver extends uvm_driver #(dec_seq_item);
   // drives the value's from seq_item to interface signals
   virtual task drive();
 
-      str2 = req.get_str();
-      // uvm_config_db#(string)::set(this, "uvm_test_top", "str2", str2);
-      uvm_config_db#(string)::set(uvm_root::get(),"*","str2",str2);
-      
-      msg_padded2 = pad(.str2(str2), .pre_length(req.pre_length));
-      msg_crypto2 = encrypt(.msg_padded2(msg_padded2), .pat_sel(req.pat_sel), .LFSR_init(req.LFSR_init));
-
       `DRIV_IF.init  <= 'b1;
       `DRIV_IF.wr_en <= 'b0;
 
@@ -291,7 +258,7 @@ class dec_driver extends uvm_driver #(dec_seq_item);
         @(posedge vif.DRIVER.clk);
         `DRIV_IF.wr_en   <= 'b1;                   // turn on memory write enable
         `DRIV_IF.waddr   <= qp+64;                 // write encrypted message to mem [64:127]
-        `DRIV_IF.data_in <= msg_crypto2[qp];
+        `DRIV_IF.data_in <= req.msg_crypto2[qp];
       end
 
       @(posedge vif.DRIVER.clk) `DRIV_IF.wr_en <= 'b0;                   // turn off mem write for rest of simulation
@@ -303,7 +270,7 @@ class dec_driver extends uvm_driver #(dec_seq_item);
       #10ns $display("done at time %t",$time);
 
       `DRIV_IF.reading <= 1;
-      for(int n=0; n<str2.len+1; n++)
+      for(int n=0; n<req.str2.len+1; n++)
         @(posedge vif.DRIVER.clk) `DRIV_IF.raddr <= n;
 
       @(posedge vif.DRIVER.clk) `DRIV_IF.reading <= 0;
