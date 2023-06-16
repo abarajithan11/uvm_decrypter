@@ -314,7 +314,7 @@ class dec_driver extends uvm_driver #(dec_seq_item);
         @(posedge vif.DRIVER.clk) `DRIV_IF.raddr <= n;
 
       @(posedge vif.DRIVER.clk) `DRIV_IF.reading <= 0;
-      repeat(100) @(posedge vif.DRIVER.clk);
+      repeat(2) @(posedge vif.DRIVER.clk);
 
     end else begin
 
@@ -343,7 +343,7 @@ class dec_driver extends uvm_driver #(dec_seq_item);
         @(posedge vif.DRIVER.clk) `DRIV_IF.raddr <= n;
 
       @(posedge vif.DRIVER.clk) `DRIV_IF.reading <= 0;
-      repeat(100) @(posedge vif.DRIVER.clk);
+      repeat(2) @(posedge vif.DRIVER.clk);
 
     end
 
