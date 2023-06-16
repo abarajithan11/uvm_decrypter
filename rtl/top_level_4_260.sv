@@ -53,39 +53,39 @@ module top_level_4_260(
             lfsr_trial[3][kl+1] = (lfsr_trial[3][kl]<<1)+(^(lfsr_trial[3][kl]&LFSR_ptrn[3]));   
             lfsr_trial[4][kl+1] = (lfsr_trial[4][kl]<<1)+(^(lfsr_trial[4][kl]&LFSR_ptrn[4]));   
             lfsr_trial[5][kl+1] = (lfsr_trial[5][kl]<<1)+(^(lfsr_trial[5][kl]&LFSR_ptrn[5]));   
-            $display("trials %d %h %h %h %h %h %h    %h",  kl,
-				 lfsr_trial[0][kl+1],
-				 lfsr_trial[1][kl+1],
-				 lfsr_trial[2][kl+1],
-				 lfsr_trial[3][kl+1],
-				 lfsr_trial[4][kl+1],
-				 lfsr_trial[5][kl+1],
-				 LFSR[kl+1]);			  
+        //     $display("trials %d %h %h %h %h %h %h    %h",  kl,
+				//  lfsr_trial[0][kl+1],
+				//  lfsr_trial[1][kl+1],
+				//  lfsr_trial[2][kl+1],
+				//  lfsr_trial[3][kl+1],
+				//  lfsr_trial[4][kl+1],
+				//  lfsr_trial[5][kl+1],
+				//  LFSR[kl+1]);			  
           end :trial_loop
 		  for(int mm=0;mm<6;mm++) begin :ureka_loop
-            $display("mm = %d  lfsr_trial[mm] = %h, LFSR[6] = %h",
-			     mm, lfsr_trial[mm][6], LFSR[6]); 
+          //   $display("mm = %d  lfsr_trial[mm] = %h, LFSR[6] = %h",
+			    //  mm, lfsr_trial[mm][6], LFSR[6]); 
 		    if(lfsr_trial[mm][6] == LFSR[6]) begin
 			  foundit = mm;
-			  $display("foundit = %d LFSR[6] = %h",foundit,LFSR[6]);
+			  // $display("foundit = %d LFSR[6] = %h",foundit,LFSR[6]);
             end
 		  end :ureka_loop
-		  $display("foundit fer sure = %d",foundit);								   
+		  // $display("foundit fer sure = %d",foundit);								   
 		  for(int jm=0;jm<63;jm++)
 		    LFSR[jm+1] = (LFSR[jm]<<1)+(^(LFSR[jm]&LFSR_ptrn[foundit]));
           for(int mn=7;mn<64-7;mn++) begin  :first_core_write
 		    dm1.core[mn-7] = dm1.core[64+mn-7]^{2'b0,LFSR[mn-7]};
-			$display("%dth core = %h LFSR = %h",mn,dm1.core[64+mn-7],LFSR[mn-7]);
+			// $display("%dth core = %h LFSR = %h",mn,dm1.core[64+mn-7],LFSR[mn-7]);
           end   :first_core_write
          #10ns;
          for(km=0; km<64; km++) begin
             if(dm1.core[km]==8'h5f) continue;
             else break;  
           end     
-          $display("underscores to %d th",km);
+          // $display("underscores to %d th",km);
           for(int kl=0; kl<64; kl++) begin
             dm1.core[kl] = dm1.core[kl+km];
-		    $display("%dth core = %h",kl,dm1.core[kl]);
+		    // $display("%dth core = %h",kl,dm1.core[kl]);
           end
 	  end   :loop2
     end :init_loop

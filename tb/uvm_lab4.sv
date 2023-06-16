@@ -63,30 +63,10 @@ function logic [63:0][7:0] encrypt (
     LFSR_ptrn[4] = 6'h36;
     LFSR_ptrn[5] = 6'h39;
 
-    // select LFSR tap pattern
-    // ***** choose any value < 6 *****
-    
-    if(pat_sel > 5) begin 
-      $display("illegal pattern select chosen, overriding with 3");
-      pat_sel = 3;                         // overrides illegal selections
-    end  
-    else
-      $display("tap pattern %d selected",pat_sel);
-
-    // set starting LFSR state for program -- 
-    // ***** choose any 6-bit nonzero value *****
-    if(!LFSR_init) begin
-      $display("illegal zero LFSR start pattern chosen, overriding with 6'h01");
-      LFSR_init = 6'h01;                   // override 0 with a legal (nonzero) value
-    end
-    else
-      $display("LFSR starting pattern = %b",LFSR_init);
-
     // precompute encrypted message
 	  lfsr_ptrn = LFSR_ptrn[pat_sel];        // select one of the 6 permitted tap ptrns
 
 	  lfsr2[0]     = LFSR_init;              // any nonzero value (zero may be helpful for debug)
-    $display();
     $display("LFSR_ptrn = %h, LFSR_init = %h %h",lfsr_ptrn,LFSR_init,lfsr2[0]);
 
     // compute the LFSR sequence
@@ -100,21 +80,21 @@ function logic [63:0][7:0] encrypt (
       msg_crypto2[i]        = msg_padded2[i] ^ lfsr2[i];  //{1'b0,LFSR[6:0]};	   // encrypt 7 LSBs
       str_enc2[i]           = string'(msg_crypto2[i]);
     end
-    $display("here is the original message with _ preamble padding");
+    // $display("here is the original message with _ preamble padding");
 
-    for(int jj=0; jj<64; jj++)
-      $write("%s",msg_padded2[jj]);
-    $display("\n");
-    $display("here is the padded and encrypted pattern in ASCII");
+    // for(int jj=0; jj<64; jj++)
+    //   $write("%s",msg_padded2[jj]);
+    // $display("\n");
+    // $display("here is the padded and encrypted pattern in ASCII");
 
-    for(int jj=0; jj<64; jj++)
-        $write("%s",str_enc2[jj]);
-    $display("\n");
-    $display("here is the padded pattern in hex"); 
+    // for(int jj=0; jj<64; jj++)
+    //     $write("%s",str_enc2[jj]);
+    // $display("\n");
+    // $display("here is the padded pattern in hex"); 
 
-	  for(int jj=0; jj<64; jj++)
-      $write(" %h",msg_padded2[jj]);
-	  $display("\n");
+	  // for(int jj=0; jj<64; jj++)
+    //   $write(" %h",msg_padded2[jj]);
+	  // $display("\n");
 
     return msg_crypto2;
 
@@ -374,7 +354,6 @@ class dec_monitor extends uvm_monitor;
       while (vif.monitor_cb.reading) begin
         @(posedge vif.MONITOR.clk)
         trans_collected.msg_decryp2[vif.monitor_cb.raddr] = vif.monitor_cb.data_out;
-        $display ("monitor reading %d %d", vif.monitor_cb.raddr, vif.monitor_cb.data_out); //msg_decryp2[raddr-1] <= data_out;
       end
 
     item_collected_port.write(trans_collected);
