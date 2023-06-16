@@ -166,8 +166,10 @@ class dec_seq_item extends uvm_sequence_item;
 
   rand bit [255:0][7:0] mem_data;
 
-  // function checksum ();
-  // endfunction
+  function bit [7:0] checksum();
+    for (int i=0; i<256; i++)
+      checksum ^= mem_data[i];
+  endfunction
 
   
 endclass
@@ -243,6 +245,7 @@ class mem_rw_sequence extends uvm_sequence#(dec_seq_item);
 
       req = dec_seq_item::type_id::create("req");
       req.randomize();
+      uvm_config_db#(bit [7:0])::set(uvm_root::get(),"*","checksum",req.checksum);
       uvm_config_db#(bit [255:0][7:0])::set(uvm_root::get(),"*","mem_data",req.mem_data);
       uvm_config_db#(bit)::set(uvm_root::get(),"*","is_mem_rw_test",1'b1);
 
@@ -476,6 +479,7 @@ class dec_scoreboard extends uvm_scoreboard;
     string str2;
     bit is_mem_rw_test;
     bit [255:0][7:0] mem_data;
+    bit [7:0] checksum, checksum_out;
     
     forever begin
       wait(pkt_qu.size() > 0);
@@ -489,11 +493,25 @@ class dec_scoreboard extends uvm_scoreboard;
         if(!uvm_config_db#(bit [255:0][7:0])::get(this, "", "mem_data", mem_data))
           `uvm_fatal("NO_MEMDATA",{"no mem data found"});
 
+        if(!uvm_config_db#(bit [7:0])::get(this, "", "checksum", checksum))
+          `uvm_fatal("NO_MEMDATA",{"no mem data found"});
+
         assert (dec_pkt.msg_decryp2 == mem_data) 
-          $display ("\n - MEM DATA MATCHES\n");
+          $display ("\n - MEM DATA MATCHES");
         else begin
           `uvm_error("ERROR", "Mem data failed");
-          $display ("\n - DECRYPTION FAILED. Sent: %d, Got: %d \n", mem_data, dec_pkt.msg_decryp2);
+          $display ("\n - MEM DATA FAILED. Sent: %d, Got: %d \n", mem_data, dec_pkt.msg_decryp2);
+        end
+
+        checksum_out = 0;
+        for (int i=0; i<256; i++)
+          checksum_out ^= dec_pkt.msg_decryp2[i];
+
+        assert (checksum_out == checksum) 
+          $display (" - CHECKSUM MATCHES\n");
+        else begin
+          `uvm_error("ERROR", "Checksum failed");
+          $display ("\n - CHECKSUM FAILED. Sent: %d, Got: %d \n", checksum, checksum_out);
         end
 
       end else begin
