@@ -1,9 +1,9 @@
 // `include "uvm_macros.svh"
 // import uvm_pkg::*;
 
-typedef logic [7:0] unpacked_8_64 [64];
+// typedef logic [63:0][7:0] logic [63:0][7:0];
 
-function unpacked_8_64 pad (
+function logic [63:0][7:0] pad (
   input string str2,
   input logic [7:0] pre_length
   );
@@ -44,15 +44,15 @@ function unpacked_8_64 pad (
 
 endfunction
 
-function unpacked_8_64 encrypt (
-    input unpacked_8_64 msg_padded2,
+function logic [63:0][7:0] encrypt (
+    input logic [63:0][7:0] msg_padded2,
     input int pat_sel,
     input logic [5:0] LFSR_init  // for program 2 run
   );
 
     string      str_enc2[64];          // decryption program input
     logic [5:0] LFSR_ptrn[6];		       // 6 possible maximal-length 6-bit LFSR tap ptrns
-    unpacked_8_64 msg_crypto2;
+    logic [63:0][7:0] msg_crypto2;
     logic [5:0] lfsr_ptrn,
                 lfsr2[64];
 
@@ -208,9 +208,9 @@ module Lab_4_260_tb;
 
   rand_data obj;
   string      str2, str_dec2    ;          // decrypted string will go here
-  logic [7:0] msg_crypto2[64]   ,          // encrypted message according to the DUT
-              msg_decryp2[64]   ,          // recovered decrypted message from DUT
-              msg_padded2[64]   ;
+  logic [63:0][7:0] msg_crypto2   ,          // encrypted message according to the DUT
+                    msg_decryp2   ,          // recovered decrypted message from DUT
+                    msg_padded2   ;
 
   bit reading = 0;
   bit [7:0] raddr_mon = 0;
