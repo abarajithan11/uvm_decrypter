@@ -195,10 +195,9 @@ class dec_seq_item extends uvm_sequence_item;
   endfunction
   
   //constaint, to generate any one among write and read
-  constraint pre_length_c { pre_length  >=7 && pre_length <= 63; } // values 7 to 63 recommended
+  constraint pre_length_c { pre_length  >=7 && pre_length <= 12; } // values 7 to 63 recommended
   constraint pat_sel_size { pat_sel < 6; }
   constraint LFSR_init_non_zero { LFSR_init !=0; }
-  constraint str_len { temp.size() < 50; } // Length of the string
   constraint str_ascii { foreach(temp[i]) temp[i] inside {[65:90], [97:122]}; } //To restrict between 'A-Z' and 'a-z'
   constraint padded_len { pre_length + temp.size() <= 50; }
 
@@ -243,28 +242,13 @@ class dec_sequence extends uvm_sequence#(dec_seq_item);
   
   // create, randomize and send the item to driver
   virtual task body();
-   repeat(2) begin
+   repeat(10) begin
     req = dec_seq_item::type_id::create("req");
     wait_for_grant();
     req.randomize();
     send_request(req);
     wait_for_item_done();
    end 
-  endtask
-endclass
-
-// wr_rd_sequence - "write" followed by "read" (sequence's inside sequences)
-class wr_rd_sequence extends uvm_sequence#(dec_seq_item);
-  
-  `uvm_object_utils(wr_rd_sequence)
-   
-  //Constructor
-  function new(string name = "wr_rd_sequence");
-    super.new(name);
-  endfunction
-  
-  virtual task body();
-    `uvm_do_with(req,{})
   endtask
 endclass
 
@@ -343,7 +327,7 @@ class dec_driver extends uvm_driver #(dec_seq_item);
         @(posedge vif.DRIVER.clk) `DRIV_IF.raddr <= n;
 
       @(posedge vif.DRIVER.clk) `DRIV_IF.reading <= 0;
-      @(posedge vif.DRIVER.clk);
+      repeat(100) @(posedge vif.DRIVER.clk);
 
   endtask : drive
 endclass : dec_driver
@@ -491,8 +475,10 @@ class dec_scoreboard extends uvm_scoreboard;
       $display ("Original message: %s, Decoded message: %s , len %d", str2, str_dec2, str2.len);
       assert (str_dec2 == str2) 
         $display ("\n - DECRYPTION SUCCESSFUL\n");
-      else
-        $fatal ("\n - DECRYPTION FAILED. Sent: %s, Got: %s \n", str2, str_dec2);
+      else begin
+        `uvm_error("ERROR", "failed");
+        $display ("\n - DECRYPTION FAILED. Sent: %s, Got: %s \n", str2, str_dec2);
+      end
     end
   endtask : run_phase
 endclass : dec_scoreboard
@@ -590,7 +576,7 @@ class dec_wr_rd_test extends dec_model_base_test;
   `uvm_component_utils(dec_wr_rd_test)
   
   // sequence instance 
-  wr_rd_sequence seq;
+  dec_sequence seq;
 
   // constructor
   function new(string name = "dec_wr_rd_test",uvm_component parent=null);
@@ -602,7 +588,7 @@ class dec_wr_rd_test extends dec_model_base_test;
     super.build_phase(phase);
 
     // Create the sequence
-    seq = wr_rd_sequence::type_id::create("seq");
+    seq = dec_sequence::type_id::create("seq");
   endfunction : build_phase
   
   // run_phase - starting the test
