@@ -58,7 +58,6 @@ class dec_seq_item extends uvm_sequence_item;
     `uvm_field_int(pre_length,UVM_ALL_ON)
     `uvm_field_int(pat_sel,UVM_ALL_ON)
     `uvm_field_int(LFSR_init,UVM_ALL_ON)
-    // `uvm_field_int(temp,UVM_ALL_ON)
   `uvm_object_utils_end
   
   //Constructor
@@ -77,7 +76,7 @@ class dec_seq_item extends uvm_sequence_item;
   constraint padded_len { pre_length + temp.size() <= 50; }
 
 
-  logic [255:0][7:0] msg_padded2, msg_crypto2, msg_decryp2;
+  logic [255:0][7:0] msg_padded2, msg_crypto2, mem_data_monitored;
   string      str_enc2[64];          // decryption program input
   logic [5:0] LFSR_ptrn[6];		       // 6 possible maximal-length 6-bit LFSR tap ptrns
   logic [5:0] lfsr_ptrn, lfsr2[64];
@@ -391,7 +390,7 @@ class dec_monitor extends uvm_monitor;
       wait(vif.monitor_cb.reading);
       while (vif.monitor_cb.reading) begin
         @(posedge vif.MONITOR.clk)
-        trans_collected.msg_decryp2[vif.monitor_cb.raddr] = vif.monitor_cb.data_out;
+        trans_collected.mem_data_monitored[vif.monitor_cb.raddr] = vif.monitor_cb.data_out;
       end
 
     item_collected_port.write(trans_collected);
@@ -496,16 +495,16 @@ class dec_scoreboard extends uvm_scoreboard;
         if(!uvm_config_db#(bit [7:0])::get(this, "", "checksum", checksum))
           `uvm_fatal("NO_MEMDATA",{"no mem data found"});
 
-        assert (dec_pkt.msg_decryp2 == mem_data) 
+        assert (dec_pkt.mem_data_monitored == mem_data) 
           $display ("\n - MEM DATA MATCHES");
         else begin
           `uvm_error("ERROR", "Mem data failed");
-          $display ("\n - MEM DATA FAILED. Sent: %d, Got: %d \n", mem_data, dec_pkt.msg_decryp2);
+          $display ("\n - MEM DATA FAILED. Sent: %d, Got: %d \n", mem_data, dec_pkt.mem_data_monitored);
         end
 
         checksum_out = 0;
         for (int i=0; i<256; i++)
-          checksum_out ^= dec_pkt.msg_decryp2[i];
+          checksum_out ^= dec_pkt.mem_data_monitored[i];
 
         assert (checksum_out == checksum) 
           $display (" - CHECKSUM MATCHES\n");
@@ -521,7 +520,7 @@ class dec_scoreboard extends uvm_scoreboard;
 
         str_dec2 = "";
         for(int rr=0; rr<str2.len; rr++)
-          str_dec2 = {str_dec2, string'(dec_pkt.msg_decryp2[rr])};
+          str_dec2 = {str_dec2, string'(dec_pkt.mem_data_monitored[rr])};
 
         $display ("Original message: %s, Decoded message: %s , len %d", str2, str_dec2, str2.len);
         assert (str_dec2 == str2) 
