@@ -457,22 +457,15 @@ class dec_scoreboard extends uvm_scoreboard;
         if(!uvm_config_db#(bit [7:0])::get(this, "", "checksum", checksum))
           `uvm_error("NO_MEMDATA",{"no mem data found"});
 
-        assert (dec_pkt.mem_data_monitored == mem_data) 
-          $display ("\n - MEM DATA MATCHES");
-        else begin
-          `uvm_error("ERROR", "Mem data failed");
-          $display ("\n - MEM DATA FAILED. Sent: %d, Got: %d \n", mem_data, dec_pkt.mem_data_monitored);
-        end
-
         checksum_out = 0;
         for (int i=0; i<256; i++)
           checksum_out ^= dec_pkt.mem_data_monitored[i];
 
-        assert (checksum_out == checksum) 
-          $display (" - CHECKSUM MATCHES: %d \n", checksum);
+        assert (checksum_out == checksum && dec_pkt.mem_data_monitored == mem_data) 
+          $display (" - MEM DATA MATCHES, CHECKSUM MATCHES: %d \n", checksum);
         else begin
-          `uvm_error("ERROR", "Checksum failed");
-          $display ("\n - CHECKSUM FAILED. Sent: %d, Got: %d \n", checksum, checksum_out);
+          `uvm_error("ERROR", "Mem data failed, Checksum failed");
+          $display ("\n - MEM DATA FAILED. Sent: %d, Got: %d;  CHECKSUM FAILED. Sent: %d, Got: %d \n", mem_data, dec_pkt.mem_data_monitored, checksum, checksum_out);
         end
 
       end else begin
