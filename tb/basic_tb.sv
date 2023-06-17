@@ -189,7 +189,7 @@ class rand_data;
 
 endclass
 
-module Lab_4_260_tb;
+module basic_tb;
 
 
   logic clk = 0;

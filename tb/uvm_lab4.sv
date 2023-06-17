@@ -614,7 +614,7 @@ class all_test extends dec_model_base_test;
 endclass : all_test
 
 
-module uvm_test_top;
+module uvm_top_tb;
 
   bit clk = 0;
   always #5 clk = ~clk;

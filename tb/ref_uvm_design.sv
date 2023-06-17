@@ -546,7 +546,7 @@ class mem_wr_rd_test extends mem_model_base_test;
 endclass : mem_wr_rd_test
 
 
-module tbench_top;
+module ref_uvm_tb;
 
   bit clk, reset;
 

@@ -1,6 +1,88 @@
 # UVM
 
-[From here](https://verificationguide.com/uvm/uvm-testbench-architecture/)
+To run on Windows Powershell using Xilinx Vivado:
+```
+cd xsim
+./xsim_uvm_lab4.bat
+```
+For other shells, modify commands in batch file
+
+## Result:
+
+```
+----------------------------------------------------------------
+Name                         Type                    Size  Value
+----------------------------------------------------------------
+uvm_test_top                 all_test                -     @341
+  env                        dec_model_env           -     @354
+    dec_agnt                 dec_agent               -     @375
+      driver                 dec_driver              -     @417
+        rsp_port             uvm_analysis_port       -     @436
+        seq_item_port        uvm_seq_item_pull_port  -     @426
+      monitor                dec_monitor             -     @394
+        item_collected_port  uvm_analysis_port       -     @407
+      sequencer              dec_sequencer           -     @446
+        rsp_export           uvm_analysis_export     -     @455
+        seq_item_export      uvm_seq_item_pull_imp   -     @573
+        arbitration_queue    array                   0     -
+        lock_queue           array                   0     -
+        num_last_reqs        integral                32    'd1
+        num_last_rsps        integral                32    'd1
+    dec_scb                  dec_scoreboard          -     @384
+      item_collected_export  uvm_analysis_imp        -     @590
+----------------------------------------------------------------
+
+ - MEM DATA MATCHES, CHECKSUM MATCHES:  44 
+
+ - MEM DATA MATCHES, CHECKSUM MATCHES: 116 
+
+ - MEM DATA MATCHES, CHECKSUM MATCHES:  19
+
+Encoding step: orginal message: uGD`+l7, len:           7, lk:           0, ct:           0
+LFSR_ptrn = 39, LFSR_init = 3d 3d
+done at time            522995000
+Original message: uGD`+l7, Decoded message: uGD`+l7 , len           7
+
+ - DECRYPTION SUCCESSFUL
+
+Encoding step: orginal message: qo06Q, len:           5, lk:           0, ct:           0
+LFSR_ptrn = 21, LFSR_init = 03 03
+done at time            524985000
+Original message: qo06Q, Decoded message: qo06Q , len           5
+
+ - DECRYPTION SUCCESSFUL
+
+Encoding step: orginal message: M~, len:           2, lk:           0, ct:           0
+LFSR_ptrn = 33, LFSR_init = 0b 0b
+done at time            526975000
+Original message: M~, Decoded message: M~ , len           2
+
+ - DECRYPTION SUCCESSFUL
+
+
+UVM_INFO D:/courses/ece260c/project/tb/uvm_lab4.sv(567) @ 720485000: uvm_test_top [all_test] ---------------------------------------
+UVM_INFO D:/courses/ece260c/project/tb/uvm_lab4.sv(568) @ 720485000: uvm_test_top [all_test] ----           TEST PASS           ----
+UVM_INFO D:/courses/ece260c/project/tb/uvm_lab4.sv(569) @ 720485000: uvm_test_top [all_test] ---------------------------------------
+
+
+[UVM/RELNOTES]     1
+[UVM/COMP/NAMECHECK]     1
+[TEST_DONE]     1
+[RNTST]     1
+
+** Report counts by id
+UVM_FATAL :    0
+UVM_ERROR :    0
+UVM_WARNING :    0
+UVM_INFO :    7
+** Report counts by severity
+
+--- UVM Report Summary ---
+```
+
+# UVM Structure
+
+[Step by step guide](https://verificationguide.com/uvm/uvm-testbench-architecture/)
 
 ## 1. seq_item
 
