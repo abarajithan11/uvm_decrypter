@@ -14,26 +14,13 @@ interface dec_if (input logic clk);
   
   clocking driver_cb @(posedge clk);
     default input #1 output #1;
-    output init;
-    output wr_en;
-    output raddr; 
-    output waddr;
-    output data_in;
-    input  data_out;
-    input  done;
-    output reading;
+    output init, wr_en, raddr, waddr, data_in, reading;
+    input  data_out, done;
   endclocking
   
   clocking monitor_cb @(posedge clk);
     default input #1 output #1;
-    input init;
-    input wr_en;
-    input raddr; 
-    input waddr;
-    input data_in;
-    input data_out;
-    input done;
-    input reading;
+    input init, wr_en, raddr, waddr, data_in, data_out, done, reading;
   endclocking
   
   modport DRIVER  (clocking driver_cb,  input clk);
@@ -50,7 +37,7 @@ class dec_seq_item extends uvm_sequence_item;
   rand int  unsigned pat_sel;
   rand bit  unsigned [7:0] pre_length;
   rand bit  unsigned [5:0] LFSR_init;
-  rand byte unsigned temp[];
+  rand byte unsigned str2_ascii[];
 
   
   //Utility and Field macros
@@ -72,60 +59,35 @@ class dec_seq_item extends uvm_sequence_item;
   constraint pre_length_c { pre_length  >=7 && pre_length <= 12; } // values 7 to 63 recommended
   constraint pat_sel_size { pat_sel < 6; }
   constraint LFSR_init_non_zero { LFSR_init !=0; }
-  constraint str_ascii { foreach(temp[i]) temp[i] inside {[65:90], [97:122]}; } //To restrict between 'A-Z' and 'a-z'
-  constraint padded_len { pre_length + temp.size() <= 50; }
+  constraint str_ascii { foreach(str2_ascii[i]) str2_ascii[i] inside {[32:127]} && str2_ascii[i] != 95; } // All printable ASCII except _
+  constraint padded_len { pre_length + str2_ascii.size() <= 50; }
 
 
   logic [255:0][7:0] msg_padded2, msg_crypto2, mem_data_monitored;
   string      str_enc2[64];          // decryption program input
-  logic [5:0] LFSR_ptrn[6];		       // 6 possible maximal-length 6-bit LFSR tap ptrns
+  logic [5:0] LFSR_ptrn[6] = '{6'h21, 6'h2D, 6'h30, 6'h33, 6'h36, 6'h39};;		       // 6 possible maximal-length 6-bit LFSR tap ptrns
   logic [5:0] lfsr_ptrn, lfsr2[64];
   int lk, ct;
   string str2;
 
   function encrypt ();
     // make string 
-    foreach(temp[i]) str2 = {str2, string'(temp[i])};
-
-    // set preamble lengths for the program runs (always > 6)
-    // ***** choose any value > 6 *****
-    
-    if(pre_length < 7) begin
-      $display("illegal preamble length chosen, overriding with 8");
-      pre_length =  8;                     // override < 6 with a legal value
-    end else
-      $display("preamble length = %d",pre_length);
-
-    if(str2.len>50) 
-      $display("illegally long string of length %d, truncating to 50 chars.",str2.len);
-
-    $display("original message string length = %d",str2.len);
+    foreach(str2_ascii[i]) str2 = {str2, string'(str2_ascii[i])};
 
     for(lk = 0; lk<str2.len; lk++)
       if(str2[lk]==8'h5f) continue;	       // count leading _ chars in string
-	  else break;                          // we shall add these to preamble pad length
-	  $display("embedded leading underscore count = %d",lk);
+	    else break;                          // we shall add these to preamble pad length
 
     for(int nn=0; nn<64; nn++)			   // count leading underscores
       if(str2[nn]==8'h5f) ct++; 
-	  else break;
-	  $display("ct = %d",ct);
+	    else break;
 
-    $display("run encryption of this original message: ");
-    $display("%s",str2);             // print original message in transcript window
+    $display("Encoding step: orginal message: %s, len: %d, lk: %d, ct: %d", str2, str2.len, lk, ct);
 
     for(int j=0; j<64; j++) 			   // pre-fill message_padded with ASCII _ characters
       msg_padded2[j] = 8'h5f;         
     for(int l=0; l<str2.len; l++)  	 // overwrite up to 60 of these spaces w/ message itself
       msg_padded2[pre_length+l] = byte'(str2[l]); 
-
-    // the 6 possible (constant) maximal-length feedback tap patterns from which to choose
-    LFSR_ptrn[0] = 6'h21;
-    LFSR_ptrn[1] = 6'h2D;
-    LFSR_ptrn[2] = 6'h30;
-    LFSR_ptrn[3] = 6'h33;
-    LFSR_ptrn[4] = 6'h36;
-    LFSR_ptrn[5] = 6'h39;
 
     // precompute encrypted message
 	  lfsr_ptrn = LFSR_ptrn[pat_sel];        // select one of the 6 permitted tap ptrns
@@ -277,7 +239,7 @@ class dec_driver extends uvm_driver #(dec_seq_item);
   function void build_phase(uvm_phase phase);
     super.build_phase(phase);
      if(!uvm_config_db#(virtual dec_if)::get(this, "", "vif", vif))
-       `uvm_fatal("NO_VIF",{"virtual interface must be set for: ",get_full_name(),".vif"});
+       `uvm_error("NO_VIF",{"virtual interface must be set for: ",get_full_name(),".vif"});
   endfunction: build_phase
 
   // run phase
@@ -294,7 +256,7 @@ class dec_driver extends uvm_driver #(dec_seq_item);
   virtual task drive();
 
     if(!uvm_config_db#(bit)::get(this, "", "is_mem_rw_test", is_mem_rw_test))
-        `uvm_fatal("NO_MEMDATA",{"no is_mem_rw_test found"});
+        `uvm_error("NO_MEMDATA",{"no is_mem_rw_test found"});
 
     if (is_mem_rw_test) begin
       `DRIV_IF.init  <= 'b1;
@@ -379,7 +341,7 @@ class dec_monitor extends uvm_monitor;
   function void build_phase(uvm_phase phase);
     super.build_phase(phase);
     if(!uvm_config_db#(virtual dec_if)::get(this, "", "vif", vif))
-       `uvm_fatal("NOVIF",{"virtual interface must be set for: ",get_full_name(),".vif"});
+       `uvm_error("NOVIF",{"virtual interface must be set for: ",get_full_name(),".vif"});
   endfunction: build_phase
   
   // run_phase - convert the signal level activity to transaction level.
@@ -485,15 +447,15 @@ class dec_scoreboard extends uvm_scoreboard;
       dec_pkt = pkt_qu.pop_front();
 
       if(!uvm_config_db#(bit)::get(this, "", "is_mem_rw_test", is_mem_rw_test))
-        `uvm_fatal("NO_MRW",{"no is_mem_rw_test found"});
+        `uvm_error("NO_MRW",{"no is_mem_rw_test found"});
 
       if (is_mem_rw_test) begin
 
         if(!uvm_config_db#(bit [255:0][7:0])::get(this, "", "mem_data", mem_data))
-          `uvm_fatal("NO_MEMDATA",{"no mem data found"});
+          `uvm_error("NO_MEMDATA",{"no mem data found"});
 
         if(!uvm_config_db#(bit [7:0])::get(this, "", "checksum", checksum))
-          `uvm_fatal("NO_MEMDATA",{"no mem data found"});
+          `uvm_error("NO_MEMDATA",{"no mem data found"});
 
         assert (dec_pkt.mem_data_monitored == mem_data) 
           $display ("\n - MEM DATA MATCHES");
@@ -507,7 +469,7 @@ class dec_scoreboard extends uvm_scoreboard;
           checksum_out ^= dec_pkt.mem_data_monitored[i];
 
         assert (checksum_out == checksum) 
-          $display (" - CHECKSUM MATCHES\n");
+          $display (" - CHECKSUM MATCHES: %d \n", checksum);
         else begin
           `uvm_error("ERROR", "Checksum failed");
           $display ("\n - CHECKSUM FAILED. Sent: %d, Got: %d \n", checksum, checksum_out);
@@ -516,7 +478,7 @@ class dec_scoreboard extends uvm_scoreboard;
       end else begin
 
         if(!uvm_config_db#(string)::get(this, "", "str2", str2))
-          `uvm_fatal("NO_STR",{"no str found"});
+          `uvm_error("NO_STR",{"no str found"});
 
         str_dec2 = "";
         for(int rr=0; rr<str2.len; rr++)
