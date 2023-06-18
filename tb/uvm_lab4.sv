@@ -1,3 +1,5 @@
+// Code your testbench here
+// or browse Examples
 `include "uvm_macros.svh"
 import uvm_pkg::*;
 
@@ -168,13 +170,17 @@ class dec_sequence extends uvm_sequence#(dec_seq_item);
   
   // create, randomize and send the item to driver
   virtual task body();
-   repeat(100) begin
+   repeat(10) begin
     wait_for_grant();
 
     req = dec_seq_item::type_id::create("req");
     req.randomize();
     req.encrypt();
+     
     uvm_config_db#(string)::set(uvm_root::get(),"*","str2",req.str2);
+    uvm_config_db#(int  unsigned)::set(uvm_root::get(),"*","ptrn_sel",req.pat_sel);
+     uvm_config_db#(bit  unsigned [7:0])::set(uvm_root::get(),"*","preamble_len",req.pre_length);
+     uvm_config_db#(bit  unsigned [5:0])::set(uvm_root::get(),"*","LFSR_init",req.LFSR_init);
     uvm_config_db#(bit)::set(uvm_root::get(),"*","is_mem_rw_test",1'b0);
 
     send_request(req);
@@ -201,7 +207,7 @@ class mem_rw_sequence extends uvm_sequence#(dec_seq_item);
   
   // create, randomize and send the item to driver
   virtual task body();
-   repeat(100) begin
+   repeat(10) begin
       wait_for_grant();
 
       req = dec_seq_item::type_id::create("req");
@@ -348,11 +354,13 @@ class dec_monitor extends uvm_monitor;
   // i.e, sample the values on interface signal ans assigns to transaction class fields
   virtual task run_phase(uvm_phase phase);
     forever begin
-
+		
       wait(vif.monitor_cb.reading);
       while (vif.monitor_cb.reading) begin
         @(posedge vif.MONITOR.clk)
         trans_collected.mem_data_monitored[vif.monitor_cb.raddr] = vif.monitor_cb.data_out;
+        //$display("%d, %d, %h, %d, %h", ptrn_sel, preamble_len, seed, ip_str_len, mem_data);
+        //$display("%d, %d, %h, %d, %h", trans_collected.pat_sel, trans_collected.pre_length, trans_collected.LFSR_init, trans_collected.str2.len, trans_collected.mem_data);
       end
 
     item_collected_port.write(trans_collected);
@@ -489,7 +497,121 @@ class dec_scoreboard extends uvm_scoreboard;
   endtask : run_phase
 endclass : dec_scoreboard
 
+//-------------------------------------------------------------------------
+//            Coverage
+//------------------------------------------------------------------------- 
+class coverage extends uvm_subscriber #(dec_seq_item);
+    `uvm_component_utils(coverage)
 
+    int unsigned  ptrn_sel;
+    int unsigned  preamble_len;
+    logic [5 : 0] seed;
+    int unsigned  ip_str_len;
+    logic [7 : 0] addr;
+    logic [7 : 0] mem_data;
+	
+  	bit is_mem_rw_test;	
+  
+  	string str2;
+    real mem_coverage;
+    real polyn_coverage;
+    real preamble_coverage;
+    real seed_coverage;
+    real str_len_coverage;
+    //  Covergroup: cg_ptrn_sel
+    //
+    covergroup cg_polyn_coverage;
+        coverpoint ptrn_sel {
+            bins ptrn_sel_bins[] = {[0 : 5]};
+        }
+    endgroup
+
+    covergroup cg_preamble_cov;
+        coverpoint preamble_len {
+            bins preamble_len_bins[] = {[7 : 12]};
+        }
+    endgroup
+	
+    covergroup cg_seed_cov;
+        coverpoint seed {
+            bins seed_bins[] = {[1 : $]}; 
+        }
+    endgroup
+    
+    covergroup cg_str_len_cov;
+        coverpoint ip_str_len {
+            bins ip_str_len_bins[] = {[0 : 57]};
+        }
+    endgroup
+	
+    covergroup cg_mem_test ;
+        
+        coverpoint mem_data {
+            bins data_bins[] = {[0 : $]};
+        }
+    endgroup: cg_mem_test
+	
+    function new(string name = "coverage", uvm_component parent);
+        super.new(name, parent);
+        cg_polyn_coverage = new();
+        cg_preamble_cov   = new();
+        cg_seed_cov       = new();
+        cg_str_len_cov    = new();
+        cg_mem_test       = new();
+    endfunction
+
+  function void write(dec_seq_item t);
+    $display("WRITE COVERAGE");
+      	if(!uvm_config_db#(bit)::get(this, "", "is_mem_rw_test", is_mem_rw_test))
+        `uvm_error("NO_MRW",{"no is_mem_rw_test found"});
+        
+        mem_data         = t.mem_data;
+        
+        if (is_mem_rw_test) begin
+          $display("MEM COVERAGE");
+            cg_mem_test.sample();
+            //$display("COVERAGE: addr = %8h, data = %8h", addr, data);
+        end
+        else begin
+          $display("DEC COVERAGE");
+          if(!uvm_config_db#(int  unsigned)::get(this, "", "ptrn_sel", ptrn_sel))
+          `uvm_error("NO_MRW",{"no pat_sel found"});
+          if(!uvm_config_db#(bit  unsigned [7:0])::get(this, "", "preamble_len", preamble_len))
+          `uvm_error("NO_MRW",{"no pre_length found"});
+           if(!uvm_config_db#(bit  unsigned [5:0])::get(this, "", "LFSR_init", seed))
+          `uvm_error("NO_MRW",{"no LFSR_init found"});
+          if(!uvm_config_db#(string)::get(this, "", "str2", str2))
+          `uvm_error("NO_MRW",{"no str2 found"});
+          ip_str_len   = str2.len;
+          $display("%d, %d, %h, %d, %h", ptrn_sel, preamble_len, seed, ip_str_len, mem_data);
+          //s$display("%d, %d, %h, %d, %h", t.pat_sel, t.pre_length, t.LFSR_init, t.str2.len, t.mem_data);
+            cg_polyn_coverage.sample();  
+            cg_preamble_cov.sample();  
+            cg_seed_cov.sample();      
+            cg_str_len_cov.sample();     
+        end
+    endfunction
+
+    function void extract_phase(uvm_phase phase);
+        super.extract_phase(phase);
+        polyn_coverage = cg_polyn_coverage.get_coverage();
+        preamble_coverage = cg_preamble_cov.get_coverage();
+        seed_coverage = cg_seed_cov.get_coverage();
+        str_len_coverage = cg_str_len_cov.get_coverage();
+        mem_coverage = cg_mem_test.get_coverage();
+    endfunction: extract_phase
+
+    function void report_phase(uvm_phase phase);
+        super.report_phase(phase);
+        `uvm_info(get_name(), $sformatf("\nPolynomial Coverage = %f\nPreamble Coverage = %f\nSeed Coverage = %f\nString Length Coverage = %f\nMemory Functional Coverage = %f", polyn_coverage, preamble_coverage, seed_coverage, str_len_coverage, mem_coverage), UVM_NONE)
+    endfunction: report_phase
+endclass
+
+    
+    
+    
+    
+    
 //-------------------------------------------------------------------------
 //            Environment
 //-------------------------------------------------------------------------
@@ -499,7 +621,7 @@ class dec_model_env extends uvm_env;
   // agent and scoreboard instance
   dec_agent      dec_agnt;
   dec_scoreboard dec_scb;
-  
+  coverage cov;
   `uvm_component_utils(dec_model_env)
   
   // constructor
@@ -512,12 +634,14 @@ class dec_model_env extends uvm_env;
     super.build_phase(phase);
 
     dec_agnt = dec_agent::type_id::create("dec_agnt", this);
+    cov    = coverage::type_id::create ("cov",this);
     dec_scb  = dec_scoreboard::type_id::create("dec_scb", this);
   endfunction : build_phase
   
   // connect_phase - connecting monitor and scoreboard port
   function void connect_phase(uvm_phase phase);
     dec_agnt.monitor.item_collected_port.connect(dec_scb.item_collected_export);
+    dec_agnt.monitor.item_collected_port.connect(cov.analysis_export);
   endfunction : connect_phase
 
 endclass : dec_model_env
@@ -572,6 +696,7 @@ class dec_model_base_test extends uvm_test;
 
 endclass : dec_model_base_test
 
+    
 
 //-------------------------------------------------------------------------
 //            All tests
